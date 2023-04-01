@@ -1,0 +1,2 @@
+# lbctl
+Liburutegia Control
