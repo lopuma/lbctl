@@ -1,0 +1,11 @@
+argparse
+selenium
+tqdm
+termcolor
+python-dotenv
+python-decouple
+mysql-connector-python
+pandas
+redis
+Pillow
+minio
