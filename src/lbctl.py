@@ -4,13 +4,15 @@ import sys
 import json
 import pandas as pd
 import time
-import redis
 import urllib.request
 from pathlib import Path
 import os
 import random
-import mysql_connection
-from minio import Minio
+from mysql_connection import mydb, MySQLConnectionError
+from redis_connection import r
+from minio_connection import client
+from typing import Optional
+
 from minio.error import S3Error
 from PIL import Image
 from selenium import webdriver
@@ -24,14 +26,15 @@ from tqdm import tqdm, trange
 from selenium.common.exceptions import NoSuchElementException, TimeoutException, ElementClickInterceptedException
 from termcolor import colored
 from decouple import config
+from loguru import logger
+
 
 color_out = "green"
 color_key = "yellow"
 color_value = "blue"
-color_analizando = "yellow"
 color_error = "red"
 color_warning = "yellow"
-color_success = "green"
+
 def main():
     options = webdriver.FirefoxOptions()
     options.add_argument('--start-maximized')
@@ -98,6 +101,20 @@ def capitalizar_palabras(cadena, excepciones=["de"]):
         palabras_mayusculas.append(palabra)
     return ' '.join(palabras_mayusculas)
 
+
+
+def success(text: str, filename: Optional[str] = None):
+    message = f"\n<green>{text}</green>"
+    if filename:
+        message += f" Filename: {filename}"
+    logger.opt(colors=True).info(os.linesep + message)
+
+def info(text: str):
+    logger.opt(colors=True).info(f"\n<yellow>{text}</yellow>")
+
+def warning(text: str):
+    logger.opt(colors=True).warning(f"\n<red>{text}</red>")
+    
 def generate_cover_rand(length, type='default'):
     if type == 'num':
         characters = "0123456789"
@@ -137,12 +154,6 @@ def process_image(data_cover):
 def add_minio(name_cover):
     filename = name_cover + ".png"
     try:
-        client = Minio(
-        endpoint=config("MINIO_HOST"),
-        access_key=config("MINIO_USER"),
-        secret_key=config("MINIO_PASSWORD"),
-        secure= False,
-        )
         bucket = config("BUCKET_NAME")
         found = client.bucket_exists(bucket)
         if not found:
@@ -152,30 +163,25 @@ def add_minio(name_cover):
         client.fput_object(
             bucket, filename, os.path.join(".", "covers", filename),
         )
-        print("\n")
-        print(colored("Cover data upload MINIO.", color_success), filename)
+        
+        success("Cover data upload MINIO.", filename)
     except S3Error as exc:
         print("\nerror occurred.", exc)
 
-def delete_redis():
+def delete_book_redis(idBook):
     try:
-        r = redis.Redis(host=config("REDIS_HOST"), port=6379, password=config("REDIS_PASSWORD"))
         exist_book = r.exists('books')
         if exist_book:
             r.delete('books')
-        # print("\n")
-        # print(colored(f"Eliminados datos en redis.", color_success))
-        yield
     except:
         pass
 
-def delete_bookinfo_redis(idBook):
     try:
         bookID = idBook
-        r = redis.Redis(host=config("REDIS_HOST"), port=6379, password=config("REDIS_PASSWORD"))
         exist_book = r.exists(f'bookInfo{bookID}')
         if exist_book:
             r.delete(f'bookInfo{bookID}')
+        success(f"Eliminados datos en redis.")
     except:
         pass
 
@@ -192,44 +198,35 @@ def extract_data(data):
     try:
         datos['title'] = data[0]['title']
     except (IndexError, KeyError):
-        print(colored("Error al acceder al title en los datos recibidos.", color_error))
+        warning("Error al acceder al title en los datos recibidos.")
     try:
         datos['author'] = data[0]['author']
     except (IndexError, KeyError):
-        print(colored("Error al acceder al author en los datos recibidos.", color_error))
+        warning("Error al acceder al author en los datos recibidos.")
     try:
         datos['editorial'] = data[0]['editorial']
     except (IndexError, KeyError):
-        print(colored("Error al acceder al editorial en los datos recibidos.", color_error))
+        warning("Error al acceder al editorial en los datos recibidos.")
     try:
         datos['isbn'] = data[0]['isbn']
     except (IndexError, KeyError):
-        print(colored("Error al acceder al ISBN en los datos recibidos.", color_error))
+        warning("Error al acceder al ISBN en los datos recibidos.")
     try:
         datos['type'] = data[0]['category']
     except (IndexError, KeyError):
-        print(colored("Error al acceder al type en los datos recibidos.", color_error))
+        warning("Error al acceder al type en los datos recibidos.")
     try:
         datos['language'] = data[0]['language']
     except (IndexError, KeyError):
-        print(colored("Error al acceder al language en los datos recibidos.", color_error))  
+        warning("Error al acceder al language en los datos recibidos.")  
     try:
         datos['cover'] = data[0]['cover']
     except (IndexError, KeyError):
-        print(colored("Error al acceder al cover en los datos recibidos.", color_error))   
+        warning("Error al acceder al cover en los datos recibidos.")   
     
     return datos
 
-def connect_database():
-    try:
-        cnx = mysql_connection.mydb
-        if cnx.is_connected():
-            cursor = cnx.cursor()
-    except:
-        pass
-    return (cursor, cnx)
-
-def loop(tareas, callback=None):
+def loop(tareas):
     while tareas:
         actual = tareas.pop(0)
         try:
@@ -237,13 +234,7 @@ def loop(tareas, callback=None):
             tareas.append(actual)
         except StopIteration:
             pass
-        if callback is not None:
-            callback()
-
-def callback():
-    print("\n")
-    print(colored("La función delete_redis se ha ejecutado", color_success))
-           
+             
 def select_idBook(book_data, name_cover, cursor):
     try:
         select_book = "SELECT bookID FROM books WHERE isbn = %s"
@@ -254,24 +245,23 @@ def select_idBook(book_data, name_cover, cursor):
             return result[0]
         else:
             return None
-    except mysql_connection.MySQLConnectionError as e:
+    except MySQLConnectionError as e:
         print("\n", colored("Error de integridad:", "red"), e.msg)
-    except mysql_connection.errors.IntegrityError as e:
-        print("\n", colored("Error de integridad en la base de datos --:", "red"), e.msg)
 
 def insert_nameCover(name_cover, idBook, cursor):
     try:
         cover_name = name_cover+'.png'
         bookID = idBook
-        insert_nameCover = ("INSERT INTO coverBooks "
+        query = ("INSERT INTO coverBooks "
                                 "(bookID, nameCover) "
                                 "VALUES (%s, %s)")
-        data_nameCover = (bookID, cover_name)
-        cursor.execute(insert_nameCover, data_nameCover)
-    except mysql_connection.MySQLConnectionError as e:
+        value = (bookID, cover_name)
+        cursor.execute(query, value)
+        
+        success(f"The book data has been added correctly, with ID : {bookID}")
+        
+    except MySQLConnectionError as e:
         print("\n", colored("Error de integridad:", "red"), e.msg)
-    except mysql_connection.errors.IntegrityError as e:
-        print("\n", colored("Error de integridad en la base de datos --:", "red"), e.msg)
     finally:
         cursor.close()
     return True
@@ -290,35 +280,37 @@ def handle_duplicate_isbn(response):
         sys.exit()
                    
 def data_operation(resultados):
-    data_book =  resultados
-    print("\n")
-    print("\033[33mRealizando operaciones en la Base de datos....\033[0m")
+    data_book = resultados
+    info("Realizando operaciones en la Base de datos....")
+    cnx = mydb
+    cursor = cnx.cursor()
     with tqdm(total=6) as rbar:
         # extraer los datos del libro
         book_data = extract_data(data_book)
         if book_data:
-            print("\n")
-            print(colored("Datos extraidos con existos.", color_success))
-        time.sleep(0.5)
-        rbar.update(1)
-        yield
-        # extraer el nombre del cover guardado en local
-        name_cover = extract_nameCover(book_data['cover'])
-        if name_cover:
-            print("\n")
-            print(colored(f"Cover {name_cover} descargado con existos.", color_success))        
+            
+            success("Datos extraidos con éxito.")
         time.sleep(0.5)
         rbar.update(1)
         yield
         
-        # conect mysql
-        cursor, cnx = connect_database()
-        if cursor:
-            print("\n")
-            print(colored(f"The DataBase is connected on the PORT: {config('MYSQL_PORT')}", color_success))
+        # extraer el nombre del cover guardado en local
+        name_cover = extract_nameCover(book_data['cover'])
+        if name_cover:
+            success("Cover {name_cover} descargado con éxito.")
         time.sleep(0.5)
         rbar.update(1)
         yield
+        
+        # conectar a MySQL
+        # cursor, cnx = connect_database()
+        if cursor:
+            
+            success(f"The DataBase is connected on the PORT: {config('MYSQL_PORT')}")
+        time.sleep(0.5)
+        rbar.update(1)
+        yield
+        
         bookID = ""
         response = exist_databook(book_data, cursor)
         if response:
@@ -332,24 +324,19 @@ def data_operation(resultados):
             if succes_data:
                 cnx.commit()
                 bookID = select_idBook(book_data, name_cover, cursor)
+                print("ID BOOK", bookID)
                 if bookID:
-                    response_namecover = insert_nameCover(name_cover, bookID, cursor)
-                    if response_namecover:
-                        cnx.commit()
-                        print("\n")
-                        print(colored(f"The book data has been added correctly, with ID : {bookID}", color_success))
-                        time.sleep(0.5)
-                        rbar.update(1)
+                    insert_nameCover(name_cover, bookID, cursor)
+                    cnx.commit()
+                    time.sleep(0.5)
+                    rbar.update(1)
                 else:
                     rbar.close()
-                    print("\n")
-                    print(colored(f"[ ERROR ], The BOOK with ID : {bookID} does not exist", color_error))
+                    warning(f"[ ERROR ], The BOOK with ID : {bookID} does not exist")
             yield
         
-        # delete book Info
-        succes_delete_bookinfo = delete_bookinfo_redis(bookID)
-        print("\n")
-        print(colored(f"Eliminados datos en redis.", color_success))
+        # eliminar información del libro
+        delete_book_redis(bookID)
         time.sleep(0.5)
         rbar.update(1)
         yield
@@ -359,9 +346,10 @@ def data_operation(resultados):
             time.sleep(0.5)
             rbar.update(1)
         else:
-            print(colored("\nError al descargar cover.", color_error))
+            warning(f"Error al descargar cover.")
             rbar.close()
         rbar.close()
+    yield
 
 def exist_databook(book_data, cursor):
     try:
@@ -373,7 +361,7 @@ def exist_databook(book_data, cursor):
             return result[0]
         else:
             return None
-    except mysql_connection.MySQLConnectionError as e:
+    except MySQLConnectionError as e:
         print("\n", colored("Error de integridad:", "red"), e.msg)
 
 def insert_databook(book_data, cursor):
@@ -383,12 +371,13 @@ def insert_databook(book_data, cursor):
                             "VALUES (%s, %s, %s, %s, %s, %s)")
         data_book = (book_data["title"], book_data["author"], book_data["editorial"], book_data["isbn"], book_data["type"], book_data["language"])
         cursor.execute(add_book, data_book)
-    except mysql_connection.MySQLConnectionError as e:
+    except MySQLConnectionError as e:
         print("\n", colored("Error de integridad:", "red"), e.msg)
     return True
 
 def add_book_bd(data, driver):
-    print("\n\033[33mAnalizando datos....\033[0m")
+    
+    info("Analizando datos....")
     with tqdm(total=5) as abar:
         link_book = data['view']
         author = capitalizar_palabras(data['author'])
@@ -448,7 +437,7 @@ def add_book_bd(data, driver):
                 abar.close()
             else:
                 abar.close()
-                tareas = [data_operation(resultados), delete_redis()]
+                tareas = [data_operation(resultados)]
                 loop(tareas)
         else:
             print(colored('No se pudo encontrar la hoja técnica.', color_error))

@@ -1,8 +1,0 @@
-book_title = "The Great Gatsby"
-    # response = requests.get(f"https://openlibrary.org/search.json?q={book_title}")
-    # results = json.loads(response.content)
-    # book_data = results["docs"][0]
-    # print(f"Title: {book_data['title']}")
-    # print(f"ISBN: {book_data['isbn'][0]}")
-    # print(f"Author(s): {book_data['author_name']}")
-    # print(f"Publish Date: {book_data['first_publish_year']}")
