@@ -86,7 +86,6 @@ def main():
         # Llamada init Container
         initContainer(args, parser_find, driver)
 
-
 def capitalizar_palabras(cadena, excepciones=["de"]):
     palabras = cadena.split()
     palabras_mayusculas = []
@@ -100,8 +99,6 @@ def capitalizar_palabras(cadena, excepciones=["de"]):
             palabra = palabra.capitalize()
         palabras_mayusculas.append(palabra)
     return ' '.join(palabras_mayusculas)
-
-
 
 def success(text: str, filename: Optional[str] = None):
     message = f"\n<green>{text}</green>"
@@ -266,21 +263,29 @@ def insert_nameCover(name_cover, idBook, cursor):
         cursor.close()
     return True
 
-def handle_duplicate_isbn(response):
-    print(colored("Este libro ya existe en la base de datos", "yellow"), response)
-    print(colored("¿Deseas actualizar su información? (S/N)", "yellow"))
-    answer = input("> ")
-    if answer == "S" or answer == "s":
-        print(colored("¡Genial! Vamos a actualizar su información.", "green"))
-    elif answer == "N" or answer == "n":
-        print(colored("¡Entendido! Saliendo del programa...", "green"))
-        sys.exit()
-    else:
-        print(colored("No seleccionaste una opción válida. Saliendo del programa...", "red"))
-        sys.exit()
+def handle_duplicate_isbn(idBook, book_data, cursor, cnx, driver):
+    bookID = idBook
+    print("\n")
+    print(colored(f"Este libro ya existe en la base de datos, book ID: {bookID}", "yellow"))
+    while True:
+        update_input = input("\n¿Deseas actualizar su información? ( S/s - N/n ) > ")
+        if update_input.lower() == "n":
+            print("\n")
+            print(colored("Cerrando session....", "red"))
+            print("\n")
+            driver.quit()
+            sys.exit()
+        elif update_input.lower() == "s":
+            success("Perfecto vamos actualizar")
+            update_databook(bookID, book_data, cursor, cnx)
+            break
+        else:
+            print("\n\t" , colored(f"La opción", color_error), colored({update_input}, "blue"),colored(" no es válida. Por favor, ingrese una opcion validad ", color_error) + colored("S/s", color_out) + colored(" o ",color_error) + colored("N/n ", color_warning) + colored("para cancelar.", color_error))
+
                    
-def data_operation(resultados):
+def data_operation(resultados, driver):
     data_book = resultados
+    print("\n")
     info("Realizando operaciones en la Base de datos....")
     cnx = mydb
     cursor = cnx.cursor()
@@ -305,17 +310,16 @@ def data_operation(resultados):
         # conectar a MySQL
         # cursor, cnx = connect_database()
         if cursor:
-            
             success(f"The DataBase is connected on the PORT: {config('MYSQL_PORT')}")
         time.sleep(0.5)
         rbar.update(1)
         yield
         
         bookID = ""
-        response = exist_databook(book_data, cursor)
-        if response:
+        bookID = exist_databook(book_data, cursor)
+        if bookID:
             rbar.close()
-            handle_duplicate_isbn(response)
+            handle_duplicate_isbn(bookID, book_data, cursor, cnx, driver)
             time.sleep(0.5)
             rbar.update(1)
             yield
@@ -375,8 +379,25 @@ def insert_databook(book_data, cursor):
         print("\n", colored("Error de integridad:", "red"), e.msg)
     return True
 
-def add_book_bd(data, driver):
+def update_databook(idBook, book_data, cursor_db, cnx):
+    bookID = idBook
+    cursor = cursor_db
+    dataBook = book_data
     
+    print(idBook, dataBook, cursor)
+    try:
+        update_book = ("UPDATE books SET title=%s, author=%s, editorial=%s, isbn=%s, type=%s, language=%s WHERE bookID=%s")
+        data_book = (book_data["title"], book_data["author"], book_data["editorial"], book_data["isbn"], book_data["type"], book_data["language"], bookID)
+        cursor.execute(update_book, data_book)
+        cnx.commit()
+    except MySQLConnectionError as e:
+        print("\n", colored("Error de integridad:", "red"), e.msg)
+    finally:
+        cursor.close()
+    return True
+
+def add_book_bd(data, driver):
+    print("\n")
     info("Analizando datos....")
     with tqdm(total=5) as abar:
         link_book = data['view']
@@ -437,7 +458,7 @@ def add_book_bd(data, driver):
                 abar.close()
             else:
                 abar.close()
-                tareas = [data_operation(resultados)]
+                tareas = [data_operation(resultados, driver)]
                 loop(tareas)
         else:
             print(colored('No se pudo encontrar la hoja técnica.', color_error))
@@ -455,6 +476,7 @@ def select_book(data, df, driver):
         user_input = input("\nIngrese el ID de la opción que desea o X para salir: ")
         if user_input.lower() == "x":
             print("\n\t", colored('Cerrando session....', color_error))
+            print("\n")
             return None
         try:
             choice = int(user_input)
