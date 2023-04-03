@@ -12,6 +12,7 @@ from mysql_connection import mydb, MySQLConnectionError
 from redis_connection import r
 from minio_connection import client
 from typing import Optional
+from minio.error import InvalidResponseError
 
 from minio.error import S3Error
 from PIL import Image
@@ -148,7 +149,8 @@ def process_image(data_cover):
     
     return name_cover
 
-def add_minio(name_cover):
+def add_cover_minio(old_name_cover, name_cover):
+    old_filename = old_name_cover
     filename = name_cover + ".png"
     try:
         bucket = config("BUCKET_NAME")
@@ -156,31 +158,61 @@ def add_minio(name_cover):
         if not found:
             client.make_bucket(bucket)
         else:
-            pass
-        client.fput_object(
-            bucket, filename, os.path.join(".", "covers", filename),
-        )
-        
-        success("Cover data upload MINIO.", filename)
+            if old_filename is not None:
+                try:
+                    if client.stat_object (bucket, old_filename):
+                        client.remove_object(bucket, old_filename)
+                except InvalidResponseError   as e:
+                    print(f"Error al actualizar el archivo {filename}: {e}")
+                    return None
+            client.fput_object(
+                bucket, filename, os.path.join(".", "covers", filename),
+            )
+        return True
     except S3Error as exc:
-        print("\nerror occurred.", exc)
+        # print("\nError occurred.", exc)
+        # return None
+        if exc.code == 'NoSuchKey':
+            client.fput_object(
+                bucket, filename, os.path.join(".", "covers", filename),
+            )
+        else:
+            print(f"Error occurred. S3 operation failed; code: {exc.code}, message: {exc.message}")
+        pass
+    return True
+
+def update_cover_minio(name_cover):
+    filename = name_cover + ".png"
+    try:
+        bucket = config("BUCKET_NAME")
+        found = client.bucket_exists(bucket)
+        if not found:
+            client.make_bucket(bucket)
+        else:
+            client.fput_object(
+                bucket, filename, os.path.join(".", "covers", filename),
+            )
+        
+        success("Cover data update MINIO.", filename)
+    except S3Error as exc:
+        print("\nError occurred.", exc)
 
 def delete_book_redis(idBook):
+    bookID = idBook
     try:
         exist_book = r.exists('books')
         if exist_book:
             r.delete('books')
     except:
         pass
-
     try:
-        bookID = idBook
         exist_book = r.exists(f'bookInfo{bookID}')
         if exist_book:
             r.delete(f'bookInfo{bookID}')
-        success(f"Eliminados datos en redis.")
     except:
         pass
+    
+    return True
 
 def extract_nameCover(url):
     try:
@@ -232,20 +264,7 @@ def loop(tareas):
         except StopIteration:
             pass
              
-def select_idBook(book_data, name_cover, cursor):
-    try:
-        select_book = "SELECT bookID FROM books WHERE isbn = %s"
-        data_isbn = (book_data["isbn"],)
-        cursor.execute(select_book, data_isbn)
-        result = cursor.fetchone()
-        if result:
-            return result[0]
-        else:
-            return None
-    except MySQLConnectionError as e:
-        print("\n", colored("Error de integridad:", "red"), e.msg)
-
-def insert_nameCover(name_cover, idBook, cursor):
+def insert_nameCover(name_cover, idBook, cursor, cnx):
     try:
         cover_name = name_cover+'.png'
         bookID = idBook
@@ -254,17 +273,38 @@ def insert_nameCover(name_cover, idBook, cursor):
                                 "VALUES (%s, %s)")
         value = (bookID, cover_name)
         cursor.execute(query, value)
-        
-        success(f"The book data has been added correctly, with ID : {bookID}")
-        
+        cnx.commit()
     except MySQLConnectionError as e:
         print("\n", colored("Error de integridad:", "red"), e.msg)
     finally:
         cursor.close()
     return True
 
-def handle_duplicate_isbn(idBook, book_data, cursor, cnx, driver):
+def update_nameCover(name_cover, idBook, cursor, cnx):
+    nameCover = name_cover+".png"
     bookID = idBook
+    query = ("SELECT * FROM coverBooks WHERE bookID=%s")
+    value = (bookID,)
+    cursor.execute(query, value)
+    result = cursor.fetchone()
+    if result:
+        query = ("UPDATE coverBooks SET nameCover=%s WHERE bookID=%s")
+        value = (nameCover, bookID)
+        cursor.execute(query, value)
+    else:
+        query = ("INSERT INTO coverBooks (bookID, nameCover) VALUES (%s, %s)")
+        value = (bookID, nameCover)
+        cursor.execute(query, value)
+    cursor.fetchall() # <-- leer todos los resultados pendientes
+    cnx.commit()
+    cursor.close()
+
+
+def handle_duplicate_isbn(idBook, book_data, name_cover, driver):
+    cnx = mydb
+    cursor = cnx.cursor()
+    bookID = idBook
+    nameCover = name_cover
     print("\n")
     print(colored(f"Este libro ya existe en la base de datos, book ID: {bookID}", "yellow"))
     while True:
@@ -277,87 +317,105 @@ def handle_duplicate_isbn(idBook, book_data, cursor, cnx, driver):
             sys.exit()
         elif update_input.lower() == "s":
             success("Perfecto vamos actualizar")
-            update_databook(bookID, book_data, cursor, cnx)
+            succes_data = update_databook(bookID, book_data, cursor, cnx)
+            if succes_data:
+                update_nameCover(nameCover, bookID, cursor, cnx)
+            else:
+                print("\n")
+                warning(f"[ ERROR ], The BOOK with ID : {bookID} does not exist")
             break
         else:
             print("\n\t" , colored(f"La opción", color_error), colored({update_input}, "blue"),colored(" no es válida. Por favor, ingrese una opcion validad ", color_error) + colored("S/s", color_out) + colored(" o ",color_error) + colored("N/n ", color_warning) + colored("para cancelar.", color_error))
-
-                   
+              
 def data_operation(resultados, driver):
     data_book = resultados
     print("\n")
     info("Realizando operaciones en la Base de datos....")
-    cnx = mydb
-    cursor = cnx.cursor()
+    
     with tqdm(total=6) as rbar:
         # extraer los datos del libro
         book_data = extract_data(data_book)
         if book_data:
-            
-            success("Datos extraidos con éxito.")
-        time.sleep(0.5)
-        rbar.update(1)
+            success("- [ 1 ] Datos extraidos con éxito.")
+            time.sleep(0.5)
+            rbar.update(1)
         yield
         
-        # extraer el nombre del cover guardado en local
+        # Extraer el nombre del cover guardado en local
         name_cover = extract_nameCover(book_data['cover'])
         if name_cover:
-            success("Cover {name_cover} descargado con éxito.")
-        time.sleep(0.5)
-        rbar.update(1)
+            success(f"- [ 2 ] Cover {name_cover} descargado con éxito.")
+            time.sleep(0.5)
+            rbar.update(1)
         yield
         
         # conectar a MySQL
-        # cursor, cnx = connect_database()
+        cnx = mydb
+        cursor = cnx.cursor()
         if cursor:
-            success(f"The DataBase is connected on the PORT: {config('MYSQL_PORT')}")
-        time.sleep(0.5)
-        rbar.update(1)
+            success(f"- [ 3 ] The DataBase is connected on the PORT: {config('MYSQL_PORT')}")
+            time.sleep(0.5)
+            rbar.update(1)
         yield
         
-        bookID = ""
+        # Añadir datos a la BD
         bookID = exist_databook(book_data, cursor)
+        old_name_cover = get_name_cover(bookID, cursor)
+        print("OLD NAME COVER", old_name_cover )
         if bookID:
-            rbar.close()
-            handle_duplicate_isbn(bookID, book_data, cursor, cnx, driver)
+            handle_duplicate_isbn(bookID, book_data, name_cover, driver)
+            success(f"- [ 4 ] The book data has been update correctly, with ID : {bookID}")
             time.sleep(0.5)
             rbar.update(1)
-            yield
         else:
-            succes_data = insert_databook(book_data, cursor)
-            if succes_data:
-                cnx.commit()
-                bookID = select_idBook(book_data, name_cover, cursor)
-                print("ID BOOK", bookID)
-                if bookID:
-                    insert_nameCover(name_cover, bookID, cursor)
-                    cnx.commit()
-                    time.sleep(0.5)
-                    rbar.update(1)
-                else:
-                    rbar.close()
-                    warning(f"[ ERROR ], The BOOK with ID : {bookID} does not exist")
-            yield
-        
-        # eliminar información del libro
-        delete_book_redis(bookID)
-        time.sleep(0.5)
-        rbar.update(1)
+            book_id = insert_databook(book_data, cursor, cnx)
+            if book_id:
+                insert_nameCover(name_cover, book_id, cursor, cnx)
+            else:
+                rbar.close()
+                warning(f"[ ERROR ], The BOOK with ID : {book_id} does not exist")
+            success(f"- [ 4 ] The book data has been added correctly, with ID : {book_id}")
+            time.sleep(0.5)
+            rbar.update(1)
         yield
         
-        if name_cover is not None:
-            add_minio(name_cover)
+        # Eliminar información del libro
+        response_redis = delete_book_redis(bookID)
+        if response_redis:
+            success(f"- [ 5 ] Eliminados datos en redis.")
             time.sleep(0.5)
             rbar.update(1)
+        yield
+        
+        # Subir cover a MINIO
+        if name_cover is not None:
+            response_cover = add_cover_minio(old_name_cover, name_cover)
+            if response_cover:
+                success(f"- [ 6 ] Cover data upload MINIO, name cover is : {name_cover}.")
+                time.sleep(0.5)
+                rbar.update(1)
         else:
             warning(f"Error al descargar cover.")
             rbar.close()
         rbar.close()
     yield
 
+def get_name_cover(bookID, cursor):
+    try:
+        select_name_cover = "SELECT nameCover FROM coverBooks WHERE bookID = %s"
+        data_bookID = (bookID,)
+        cursor.execute(select_name_cover, data_bookID)
+        result = cursor.fetchone()
+        if result:
+            return result[0]
+        else:
+            return None
+    except MySQLConnectionError as e:
+        print("\n", colored("Error de integridad:", "red"), e.msg)
+
 def exist_databook(book_data, cursor):
     try:
-        select_book = "SELECT * FROM books WHERE isbn = %s"
+        select_book = "SELECT bookID FROM books WHERE isbn = %s"
         data_isbn = (book_data["isbn"],)
         cursor.execute(select_book, data_isbn)
         result = cursor.fetchone()
@@ -368,32 +426,30 @@ def exist_databook(book_data, cursor):
     except MySQLConnectionError as e:
         print("\n", colored("Error de integridad:", "red"), e.msg)
 
-def insert_databook(book_data, cursor):
+def insert_databook(book_data, cursor, cnx):
     try:
-        add_book = ("INSERT INTO books "
+        query = ("INSERT INTO books "
                             "(title, author, editorial, isbn, type, language) "
                             "VALUES (%s, %s, %s, %s, %s, %s)")
-        data_book = (book_data["title"], book_data["author"], book_data["editorial"], book_data["isbn"], book_data["type"], book_data["language"])
-        cursor.execute(add_book, data_book)
+        value = (book_data["title"], book_data["author"], book_data["editorial"], book_data["isbn"], book_data["type"], book_data["language"])
+        cursor.execute(query, value)
+        cnx.commit()
+        book_id = cursor.lastrowid
     except MySQLConnectionError as e:
         print("\n", colored("Error de integridad:", "red"), e.msg)
-    return True
+    return book_id
 
 def update_databook(idBook, book_data, cursor_db, cnx):
     bookID = idBook
     cursor = cursor_db
     dataBook = book_data
-    
-    print(idBook, dataBook, cursor)
     try:
-        update_book = ("UPDATE books SET title=%s, author=%s, editorial=%s, isbn=%s, type=%s, language=%s WHERE bookID=%s")
-        data_book = (book_data["title"], book_data["author"], book_data["editorial"], book_data["isbn"], book_data["type"], book_data["language"], bookID)
-        cursor.execute(update_book, data_book)
+        query = ("UPDATE books SET title=%s, author=%s, editorial=%s, isbn=%s, type=%s, language=%s WHERE bookID=%s")
+        value = (dataBook["title"], dataBook["author"], dataBook["editorial"], dataBook["isbn"], dataBook["type"], dataBook["language"], bookID)
+        cursor.execute(query, value)
         cnx.commit()
     except MySQLConnectionError as e:
         print("\n", colored("Error de integridad:", "red"), e.msg)
-    finally:
-        cursor.close()
     return True
 
 def add_book_bd(data, driver):
