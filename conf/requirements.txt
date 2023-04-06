@@ -8,5 +8,5 @@ mysql-connector-python
 pandas
 redis
 Pillow
-minio
+minio==7.0.3
 loguru

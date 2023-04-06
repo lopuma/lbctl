@@ -1,0 +1,7 @@
+docker-compose.yaml
+scripts/
+# Git
+.git
+.env
+Dockerfile
+README.md

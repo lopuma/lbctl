@@ -48,45 +48,85 @@ def main():
         prog="lbctl",
         usage='lbctl <command> [flags]',
         description="Liburutegia control ('lbctl') provisions and manages local Liburutegia containers optimized for production workflows.",
-        epilog='Use "lbctl --help" for more information about a given command.'
+        epilog='Use "lbctl -h / --help" for more information about a given command.'
     )
-    parser.add_argument("command", help='An ("status", "update", "reset", "stop", "find") command is needed, for default is status', type=str, default='status', nargs='?')
-    parser.add_argument("-t", '--title', help='Search by TITLE, example (lbctl find -t="title") or (lbctl find --title="title")', type=str)
-    parser.add_argument("-a", '--author', help='Search by AUTHOR, example (lbctl find -a="author") or (lbctl find --author="author")', type=str)
-    parser.add_argument("-i", '--isbn', help='Search by ISBN, example (lbctl find -i="isbn") or (lbctl find --isbn="isbn")')
-    parser.add_argument("-c", '--container', help="The following arguments are required: Container name")
+    
+    parser.add_argument(
+        "command", 
+        help='An ("status", "update", "reset", "stop", "find") command is needed, for default is status', 
+        type=str, 
+        default='status', 
+        nargs='?'
+    )
+    
+    parser.add_argument(
+        "-c", "--container",
+        help="""An ('status', 'update', 'reset', 'stop') command is needed for container.
+                Valid options are: 'status', 'update', 'reset', 'stop'""",
+        type=str,
+    )
+
+    parser.add_argument(
+        "-i", "--isbn",
+        help="""Find books by isbn, Valid options are: 'find'""",
+        type=str
+    )
+
+    parser.add_argument(
+        "-t", "--title",
+        help="""Find books by title, Valid options are: 'find'""",
+        type=str
+    )
+
+    parser.add_argument(
+        "-a", "--author",
+        help="""Find books by author, Valid options are: 'find'""",
+        type=str
+    )
+    
     args = parser.parse_args()
 
-    if args.command == "find" or (args.command == "help" and args.container == "find"):
-        parser_find = argparse.ArgumentParser(
-            prog="lbctl find",
-            usage='lbctl find [flags]',
-            description="Search book data on the web"
-        )
-        parser_find.add_argument("-t", '--title', help='Search by TITLE, example (lbctl find -t="title") or (lbctl find --title="title")', type=str)
-        parser_find.add_argument("-a", '--author', help='Search by AUTHOR, example (lbctl find -a="author") or (lbctl find --author="author")', type=str)
-        parser_find.add_argument("-i", '--isbn', help='Search by ISBN, example (lbctl find -i="isbn") or (lbctl find --isbn="isbn")')
-        args_find, _ = parser_find.parse_known_args()
-        if not all(v is None for v in vars(args_find).values()):
-            # Si alguno de los valores no es None, se proporcionaron argumentos válidos
-            # Llamada find Book
+    parser_find = argparse.ArgumentParser(
+        prog="lbctl find",
+        usage='lbctl find [flags]',
+        description="Search book data on the web"
+    )
+    
+    parser_find.add_argument(
+        "-i", "--isbn",
+        help="""Find books by isbn, Valid options are: 'find', example (lbctl find -i="isbn") or (lbctl find --isbn="isbn")""",
+        type=str
+    )
+
+    parser_find.add_argument(
+        "-t", "--title",
+        help="""Find books by title, Valid options are: 'find', example (lbctl find -t="title") or (lbctl find --title="title")""",
+        type=str
+    )
+
+    parser_find.add_argument(
+        "-a", "--author",
+        help="""Find books by author, Valid options are: 'find', example (lbctl find -a="author") or (lbctl find --author="author")""",
+        type=str
+    )
+    
+    if args.command == "find":
+        if args.title or args.author or args.isbn:
             driver = webdriver.Remote(
                 command_executor='http://{}:4444/wd/hub'.format(config('WEBDRIVER_HOST')),
                 options=options
             )
             initContainer(args, parser_find, driver)
         else:
-            # No se proporcionaron argumentos válidos, imprimir ayuda
             parser_find.print_help()
+    elif args.command in ["status", "update", "reset", "stop"]:
+        if not args.container:
+            parser.print_help()
+        else:
+            initContainer(args, parser)
     else:
-        driver = webdriver.Remote(
-                command_executor='http://{}:4444/wd/hub'.format(config('WEBDRIVER_HOST')),
-            options=options
-        )
-
-        # Llamada init Container
-        initContainer(args, parser_find, driver)
-
+        parser.print_help()
+        
 def capitalizar_palabras(cadena, excepciones=["de"]):
     palabras = cadena.split()
     palabras_mayusculas = []
@@ -135,7 +175,8 @@ def process_image(data_cover):
     # Descargar la imagen
     url = data_cover
     name_cover = generate_cover_rand(15)
-    pictures_dir = './covers/'
+    pictures_dir = '/app/covers-liburutegia/'
+    #carpeta dentro del container de python
     urllib.request.urlretrieve(url, pictures_dir + name_cover + '.png')
     
     # Abrir la imagen con Pillow
@@ -166,20 +207,23 @@ def add_cover_minio(old_name_cover, name_cover):
                     print(f"Error al actualizar el archivo {filename}: {e}")
                     return None
             client.fput_object(
-                bucket, filename, os.path.join(".", "covers", filename),
+                bucket, filename, os.path.join('/app/covers-liburutegia', filename),
             )
-        return True
+            #carpeta dentro del container de python
+            return True
     except S3Error as exc:
         # print("\nError occurred.", exc)
         # return None
         if exc.code == 'NoSuchKey':
             client.fput_object(
-                bucket, filename, os.path.join(".", "covers", filename),
+                bucket, filename, os.path.join('/app/covers-liburutegia', filename)
             )
+            #carpeta dentro del container de python
+            return True
         else:
             print(f"Error occurred. S3 operation failed; code: {exc.code}, message: {exc.message}")
+            return None
         pass
-    return True
 
 def update_cover_minio(name_cover):
     filename = name_cover + ".png"
@@ -190,7 +234,7 @@ def update_cover_minio(name_cover):
             client.make_bucket(bucket)
         else:
             client.fput_object(
-                bucket, filename, os.path.join(".", "covers", filename),
+                bucket, filename, os.path.join(config('COVER_DIR'), filename),
             )
         
         success("Cover data update MINIO.", filename)
@@ -299,7 +343,6 @@ def update_nameCover(name_cover, idBook, cursor, cnx):
     cnx.commit()
     cursor.close()
 
-
 def handle_duplicate_isbn(idBook, book_data, name_cover, driver):
     cnx = mydb
     cursor = cnx.cursor()
@@ -361,7 +404,6 @@ def data_operation(resultados, driver):
         # Añadir datos a la BD
         bookID = exist_databook(book_data, cursor)
         old_name_cover = get_name_cover(bookID, cursor)
-        print("OLD NAME COVER", old_name_cover )
         if bookID:
             handle_duplicate_isbn(bookID, book_data, name_cover, driver)
             success(f"- [ 4 ] The book data has been update correctly, with ID : {bookID}")
@@ -395,7 +437,7 @@ def data_operation(resultados, driver):
                 time.sleep(0.5)
                 rbar.update(1)
         else:
-            warning(f"Error al descargar cover.")
+            warning(f"Error al subir cover.")
             rbar.close()
         rbar.close()
     yield
@@ -656,28 +698,29 @@ def findBook(data, driver, parser_find):
         parser_find.print_help()
         driver.quit()
     else:
-        print("\n" + f"{colored('El libro a buscar es', color_key, attrs=['bold'])} --> {colored('Title: ', color_key)} --> {colored(title, color_value)}, {colored('Author:', color_key)} --> {colored(author, color_value)}, {colored('isbn:', color_key)} --> {colored(isbn, color_value)}")
+        print("\n" + f"{colored('El libro a buscar es', color_key, attrs=['bold'])} --> {colored('Title: ', color_key)} --> {colored({title}, color_value)}, {colored('Author:', color_key)} --> {colored(author, color_value)}, {colored('isbn:', color_key)} --> {colored(isbn, color_value)}")
         print("\033[33m\nBuscando datos....\033[0m")
         scraping(data_element, driver)            
 
-def initContainer(args, parser_find, driver):
+def initContainer(args, parser_find, driver=None):
     match args.command:
         case "update":
-            print(f"El comando que ejecutas es 1 : {args.command} y el contenedor : {args.container}")
+            print(f"El comando que ejecutas es : {args.command} y el contenedor : {args.container}")
         case "stop":
-            print(f"El comando que ejecutas es 2 : {args.command} y el contenedor : {args.container}")
-        case "restart":
-            print(f"El comando que ejecutas es 3 : {args.command} y el contenedor : {args.container}")
+            print(f"El comando que ejecutas es : {args.command} y el contenedor : {args.container}")
+        case "reset":
+            print(f"El comando que ejecutas es : {args.command} y el contenedor : {args.container}")
         case "find":
-            flags = []
-            flags.append(args.title)
-            flags.append(args.author)
-            flags.append(args.isbn)
-            findBook(flags, driver, parser_find)
+            if driver is None:
+                print("No arguments provided. Skipping Selenium initialization.")
+            else:
+                flags = []
+                flags.append(args.title)
+                flags.append(args.author)
+                flags.append(args.isbn)
+                findBook(flags, driver, parser_find)
         case _:
-            print(f"El comando que ejecutas es 4 : {args.command} y el contenedor : {args.container}")
-            #    result = subprocess.run(['docker', '-H', 'unix:///var/run/docker.sock', 'ps'], stdout=subprocess.PIPE)
-            #    print(result.stdout.decode('utf-8'))
+            print(f"El comando que ejecutas es : {args.command} y el contenedor : {args.container}")
 
 if __name__=='__main__':
     main()
