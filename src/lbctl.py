@@ -641,22 +641,18 @@ def scraping(element, driver):
             try:
                 title = article.find_element(By.CSS_SELECTOR, ".ebx-result-title a").text.strip()
             except NoSuchElementException:
-                print(colored('No se pudo encontrar el elemento del título.', color_warning))
                 title = ''
             try:
                 author = article.find_element(By.CSS_SELECTOR, ".ebx-result-authors").text.strip()
             except NoSuchElementException:
-                print(colored('No se pudo encontrar el elemento del autor.', color_warning))
                 author = ''
             try:
                 link = article.find_element(By.CSS_SELECTOR, ".ebx-result-title a").get_attribute('href')
             except NoSuchElementException:
-                print(colored('No se pudo encontrar el elemento del enlace.', color_warning))
                 link = ''
             try:
                 other = article.find_element(By.CSS_SELECTOR, ".ebx-result-binding-type").text.strip()
             except NoSuchElementException:
-                print(colored('No se pudo encontrar el elemento de otra informacion.', color_warning))
                 other = ''
             
             dict_article_data = {}
