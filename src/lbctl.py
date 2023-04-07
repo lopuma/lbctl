@@ -1,7 +1,6 @@
 import argparse
 import subprocess
 import sys
-import json
 import pandas as pd
 import time
 import urllib.request
@@ -12,9 +11,7 @@ from mysql_connection import mydb, MySQLConnectionError
 from redis_connection import r
 from minio_connection import client
 from typing import Optional
-from minio.error import InvalidResponseError
-
-from minio.error import S3Error
+from minio.error import InvalidResponseError, S3Error
 from PIL import Image
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
