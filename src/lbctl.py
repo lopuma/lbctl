@@ -1,39 +1,59 @@
 import argparse
-import subprocess
 import sys
 import pandas as pd
 import time
 import urllib.request
-from pathlib import Path
 import os
 import random
-from mysql_connection import mydb, MySQLConnectionError
-from redis_connection import r
-from minio_connection import client
-from typing import Optional
+import platform
+import socket
+from utils.utils import success, info, warning, error, log, debug, select_option
+from database.mysql_connection import DAO, MySQLConnectionError
+from redis_db.redis_connection import r
+from minio_s3.minio_connection import client
 from minio.error import InvalidResponseError, S3Error
 from PIL import Image
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
-from selenium.webdriver.common.alert import Alert
 from tqdm import tqdm, trange
-from selenium.common.exceptions import NoSuchElementException, TimeoutException, ElementClickInterceptedException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, ElementClickInterceptedException, InvalidSessionIdException, WebDriverException
 from termcolor import colored
 from decouple import config
-from loguru import logger
-
 
 color_out = "green"
 color_key = "yellow"
 color_value = "blue"
 color_error = "red"
-color_warning = "yellow"
+color_warning = "magenta"
+__version__ = '1.0.0'
+
+
+host = config('WEBDRIVER_HOST')
+port = config('WEBDRIVER_PORT_CLI')
+port = int(port)
 
 def main():
+    
+    # Crea un objeto socket
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    # Establece un tiempo de espera para la conexión
+    client_socket.settimeout(5)
+
+    # Intenta conectarse al host
+    try:
+        client_socket.connect((host, port))
+        print("\n")
+        print(f"Conexión exitosa a SELENIUM http://{host}:{config('WEBDRIVER_PORT_WEB')}")
+    except socket.error as err:
+        print(f"No se pudo conectar a SELENIUM http://{host}:{config('WEBDRIVER_PORT_WEB')}. Error: {err}")
+        return
+    finally:
+        # Cierra la conexión
+        client_socket.close()
+    
     options = webdriver.FirefoxOptions()
     options.add_argument('--start-maximized')
     options.add_argument('--disable-extensions')
@@ -44,86 +64,132 @@ def main():
     parser = argparse.ArgumentParser(
         prog="lbctl",
         usage='lbctl <command> [flags]',
-        description="Liburutegia control ('lbctl') provisions and manages local Liburutegia containers optimized for production workflows.",
+        description='''
+            lbctl is a commandline database manager and provides commands for.
+            \n
+            \t- searching and managing as well as querying information about books.
+        ''',
         epilog='Use "lbctl -h / --help" for more information about a given command.'
     )
-    
     parser.add_argument(
-        "command", 
-        help='An ("status", "update", "reset", "stop", "find") command is needed, for default is status', 
-        type=str, 
-        default='status', 
-        nargs='?'
-    )
-    
-    parser.add_argument(
-        "-c", "--container",
-        help="""An ('status', 'update', 'reset', 'stop') command is needed for container.
-                Valid options are: 'status', 'update', 'reset', 'stop'""",
-        type=str,
+        '-v', '--version',
+        action='version',
+        version='%(prog)s {version} {platform} ({machine})'.format(version=__version__, platform=platform.system(),machine=platform.machine())
     )
 
-    parser.add_argument(
-        "-i", "--isbn",
-        help="""Find books by isbn, Valid options are: 'find'""",
-        type=str
+    subparsers = parser.add_subparsers(dest='command', title='Most used commands:', metavar='')
+
+    search_parser = subparsers.add_parser(
+        'search',
+        usage='lbctl search [search pattern]',
+        description='Most used pattern:\n  Titulo, Autor, ISBN', 
+        help='Busca libros por Titulo, Autor o ISBN'
+    )
+    search_parser.add_argument(
+        'query', 
+        nargs='*', 
+        help='Se debe especificar el Titulo del libro, Autor o ISBN'
     )
 
-    parser.add_argument(
-        "-t", "--title",
-        help="""Find books by title, Valid options are: 'find'""",
-        type=str
+    status_parser = subparsers.add_parser(
+        'status',
+        usage='lbctl status CONTAINER',
+        help='Ver el estado del contenedor'
+    )
+    status_parser.add_argument(
+        'container', 
+        nargs='*', 
+        help='Se debe indicar el id o name del container'
     )
 
-    parser.add_argument(
-        "-a", "--author",
-        help="""Find books by author, Valid options are: 'find'""",
-        type=str
+    update_parser = subparsers.add_parser(
+        'update',
+        usage='lbctl update CONTAINER',
+        help='Actualizar el contenedor'
     )
-    
-    args = parser.parse_args()
-
-    parser_find = argparse.ArgumentParser(
-        prog="lbctl find",
-        usage='lbctl find [flags]',
-        description="Search book data on the web"
-    )
-    
-    parser_find.add_argument(
-        "-i", "--isbn",
-        help="""Find books by isbn, Valid options are: 'find', example (lbctl find -i="isbn") or (lbctl find --isbn="isbn")""",
-        type=str
-    )
-
-    parser_find.add_argument(
-        "-t", "--title",
-        help="""Find books by title, Valid options are: 'find', example (lbctl find -t="title") or (lbctl find --title="title")""",
-        type=str
-    )
-
-    parser_find.add_argument(
-        "-a", "--author",
-        help="""Find books by author, Valid options are: 'find', example (lbctl find -a="author") or (lbctl find --author="author")""",
-        type=str
-    )
-    
-    if args.command == "find":
-        if args.title or args.author or args.isbn:
-            driver = webdriver.Remote(
-                command_executor='http://{}:4444/wd/hub'.format(config('WEBDRIVER_HOST')),
-                options=options
-            )
-            initContainer(args, parser_find, driver)
-        else:
-            parser_find.print_help()
-    elif args.command in ["status", "update", "reset", "stop"]:
-        if not args.container:
-            parser.print_help()
-        else:
-            initContainer(args, parser)
-    else:
-        parser.print_help()
         
+    update_parser.add_argument(
+        'container', 
+        nargs='*', 
+        help='Se debe indicar el id o name del container'
+    )
+
+    restart_parser = subparsers.add_parser(
+        'restart',
+        usage='lbctl restart CONTAINER',
+        help='restartear el contenedor'
+    )
+        
+    restart_parser.add_argument(
+        'container', 
+        nargs='*', 
+        help='Se debe indicar el id o name del container'
+    )
+
+    stop_parser = subparsers.add_parser(
+        'stop',
+        usage='lbctl stop CONTAINER',
+        help='Detener el contenedor'
+    )
+        
+    stop_parser.add_argument(
+        'container', 
+        nargs='*', 
+        help='Se debe indicar el id o name del container'
+    )
+
+    args = parser.parse_args()
+    
+    
+    if args is None:
+        parser.print_help()
+    elif hasattr(args, 'query'):
+        if args.query:
+            try:
+                driver = webdriver.Remote(
+                    command_executor='http://{}:4444/wd/hub'.format(config('WEBDRIVER_HOST')),
+                    options=options,
+                )
+                findBook(args.query, driver, parser)
+            except WebDriverException:
+                try:
+                    driver.quit()
+                except InvalidSessionIdException:
+                    pass
+                # TODO ERROR
+                # warning("No se ha encontrado ninguna sesión activa")
+                # driver = webdriver.Firefox()
+        else:
+            error("E:","Debe dar al menos un patrón de búsqueda. Use -h para ver la ayuda.")
+            sys.exit(1)
+    elif args.command == "status":
+        if not args.container:
+            error("E:","Debe dar al menos un patrón de búsqueda. Use -h para ver la ayuda.")
+            sys.exit(1)
+        else:
+            initContainer(args.command, args.container)
+    elif args.command == "update":
+        if not args.container:
+            error("E:","Debe dar al menos un patrón de búsqueda. Use -h para ver la ayuda.")
+            sys.exit(1)
+        else:
+            initContainer(args.command, args.container)
+    elif args.command == "restart":
+        if not args.container:
+            error("E:","Debe dar al menos un patrón de búsqueda. Use -h para ver la ayuda.")
+            sys.exit(1)
+        else:
+            initContainer(args.command, args.container)
+    elif args.command == "stop":
+        if not args.container:
+            error("E:","Debe dar al menos un patrón de búsqueda. Use -h para ver la ayuda.")
+            sys.exit(1)
+        else:
+            initContainer(args.command, args.container)
+    else:
+        version = parser.parse_args(['-v']).version
+        log(version)
+  
 def capitalizar_palabras(cadena, excepciones=["de"]):
     palabras = cadena.split()
     palabras_mayusculas = []
@@ -138,18 +204,6 @@ def capitalizar_palabras(cadena, excepciones=["de"]):
         palabras_mayusculas.append(palabra)
     return ' '.join(palabras_mayusculas)
 
-def success(text: str, filename: Optional[str] = None):
-    message = f"\n<green>{text}</green>"
-    if filename:
-        message += f" Filename: {filename}"
-    logger.opt(colors=True).info(os.linesep + message)
-
-def info(text: str):
-    logger.opt(colors=True).info(f"\n<yellow>{text}</yellow>")
-
-def warning(text: str):
-    logger.opt(colors=True).warning(f"\n<red>{text}</red>")
-    
 def generate_cover_rand(length, type='default'):
     if type == 'num':
         characters = "0123456789"
@@ -169,74 +223,53 @@ def generate_cover_rand(length, type='default'):
     return rand_name_cover
 
 def process_image(data_cover):
-    # Descargar la imagen
     url = data_cover
     name_cover = generate_cover_rand(15)
-    pictures_dir = '/app/covers-liburutegia/'
-    #carpeta dentro del container de python
-    urllib.request.urlretrieve(url, pictures_dir + name_cover + '.png')
-    
-    # Abrir la imagen con Pillow
+    pictures_dir = f'/app/{config("BUCKET_NAME")}/'
+    try:
+        urllib.request.urlretrieve(url, pictures_dir + name_cover + '.png')
+    except FileNotFoundError as e:
+        error("Error: ", f"el directorio {pictures_dir} de destino no existe.")
+        sys.exit(1)
     with Image.open(pictures_dir + name_cover + '.png') as img:
-        # Redimensionar la imagen y ajustar los parámetros de ajuste
         img = img.resize((200, 322), resample=Image.LANCZOS, box=None, reducing_gap=None)
-        img = img.convert('RGB') # Convertir la imagen a modo RGB
-        
-        # Guardar la imagen redimensionada
+        img = img.convert('RGB')
         img.save(pictures_dir + name_cover + '.png', format='PNG', optimize=True)
-    
     return name_cover
 
 def add_cover_minio(old_name_cover, name_cover):
     old_filename = old_name_cover
     filename = name_cover + ".png"
+    bucket = config("BUCKET_NAME")
+    found = client.bucket_exists(bucket)
     try:
-        bucket = config("BUCKET_NAME")
-        found = client.bucket_exists(bucket)
         if not found:
             client.make_bucket(bucket)
+            time.sleep(0.5)
+            client.fput_object(
+                bucket, filename, os.path.join(f'/app/{config("BUCKET_NAME")}', filename),
+            )
+            return True
         else:
             if old_filename is not None:
                 try:
-                    if client.stat_object (bucket, old_filename):
+                    if client.stat_object(bucket, old_filename):
                         client.remove_object(bucket, old_filename)
-                except InvalidResponseError   as e:
-                    print(f"Error al actualizar el archivo {filename}: {e}")
+                except InvalidResponseError as e:
+                    error(f"Error al actualizar el archivo {filename}",{e})
                     return None
             client.fput_object(
-                bucket, filename, os.path.join('/app/covers-liburutegia', filename),
+                bucket, filename, os.path.join(f'/app/{config("BUCKET_NAME")}', filename),
             )
-            #carpeta dentro del container de python
             return True
     except S3Error as exc:
-        # print("\nError occurred.", exc)
-        # return None
         if exc.code == 'NoSuchKey':
             client.fput_object(
-                bucket, filename, os.path.join('/app/covers-liburutegia', filename)
+                bucket, filename, os.path.join(f'/app/{config("BUCKET_NAME")}', filename)
             )
-            #carpeta dentro del container de python
             return True
         else:
-            print(f"Error occurred. S3 operation failed; code: {exc.code}, message: {exc.message}")
             return None
-        pass
-
-def update_cover_minio(name_cover):
-    filename = name_cover + ".png"
-    try:
-        bucket = config("BUCKET_NAME")
-        found = client.bucket_exists(bucket)
-        if not found:
-            client.make_bucket(bucket)
-        else:
-            client.fput_object(
-                bucket, filename, os.path.join(config('COVER_DIR'), filename),
-            )
-        
-        success("Cover data update MINIO.", filename)
-    except S3Error as exc:
-        print("\nError occurred.", exc)
 
 def delete_book_redis(idBook):
     bookID = idBook
@@ -305,194 +338,127 @@ def loop(tareas):
         except StopIteration:
             pass
              
-def insert_nameCover(name_cover, idBook, cursor, cnx):
-    try:
-        cover_name = name_cover+'.png'
-        bookID = idBook
-        query = ("INSERT INTO coverBooks "
-                                "(bookID, nameCover) "
-                                "VALUES (%s, %s)")
-        value = (bookID, cover_name)
-        cursor.execute(query, value)
-        cnx.commit()
-    except MySQLConnectionError as e:
-        print("\n", colored("Error de integridad:", "red"), e.msg)
-    finally:
-        cursor.close()
-    return True
-
-def update_nameCover(name_cover, idBook, cursor, cnx):
-    nameCover = name_cover+".png"
-    bookID = idBook
-    query = ("SELECT * FROM coverBooks WHERE bookID=%s")
-    value = (bookID,)
-    cursor.execute(query, value)
-    result = cursor.fetchone()
-    if result:
-        query = ("UPDATE coverBooks SET nameCover=%s WHERE bookID=%s")
-        value = (nameCover, bookID)
-        cursor.execute(query, value)
-    else:
-        query = ("INSERT INTO coverBooks (bookID, nameCover) VALUES (%s, %s)")
-        value = (bookID, nameCover)
-        cursor.execute(query, value)
-    cursor.fetchall() # <-- leer todos los resultados pendientes
-    cnx.commit()
-    cursor.close()
-
 def handle_duplicate_isbn(idBook, book_data, name_cover, driver):
-    cnx = mydb
-    cursor = cnx.cursor()
+    dao = DAO()
     bookID = idBook
     nameCover = name_cover
+    print("Este libro ya existe en la base de datos, book ID: " + str(bookID))
     print("\n")
-    print(colored(f"Este libro ya existe en la base de datos, book ID: {bookID}", "yellow"))
     while True:
         update_input = input("\n¿Deseas actualizar su información? ( S/s - N/n ) > ")
         if update_input.lower() == "n":
             print("\n")
-            print(colored("Cerrando session....", "red"))
+            print("\n\t", colored('Cerrando session....', color_error))
             print("\n")
             driver.quit()
-            sys.exit()
+            sys.exit(1)
         elif update_input.lower() == "s":
-            success("Perfecto vamos actualizar")
-            succes_data = update_databook(bookID, book_data, cursor, cnx)
+            succes_data = dao.update_databook(bookID, book_data)
             if succes_data:
-                update_nameCover(nameCover, bookID, cursor, cnx)
+                dao.update_nameCover(nameCover, bookID)
             else:
-                print("\n")
-                warning(f"[ ERROR ], The BOOK with ID : {bookID} does not exist")
+                error(f"[ ERROR ], The BOOK with ID : {bookID} does not exist")
             break
         else:
             print("\n\t" , colored(f"La opción", color_error), colored({update_input}, "blue"),colored(" no es válida. Por favor, ingrese una opcion validad ", color_error) + colored("S/s", color_out) + colored(" o ",color_error) + colored("N/n ", color_warning) + colored("para cancelar.", color_error))
               
 def data_operation(resultados, driver):
     data_book = resultados
-    print("\n")
     info("Realizando operaciones en la Base de datos....")
     
     with tqdm(total=6) as rbar:
-        # extraer los datos del libro
-        book_data = extract_data(data_book)
-        if book_data:
-            success("- [ 1 ] Datos extraidos con éxito.")
-            time.sleep(0.5)
-            rbar.update(1)
-        yield
-        
-        # Extraer el nombre del cover guardado en local
-        name_cover = extract_nameCover(book_data['cover'])
-        if name_cover:
-            success(f"- [ 2 ] Cover {name_cover} descargado con éxito.")
-            time.sleep(0.5)
-            rbar.update(1)
-        yield
-        
-        # conectar a MySQL
-        cnx = mydb
-        cursor = cnx.cursor()
-        if cursor:
-            success(f"- [ 3 ] The DataBase is connected on the PORT: {config('MYSQL_PORT')}")
-            time.sleep(0.5)
-            rbar.update(1)
-        yield
-        
-        # Añadir datos a la BD
-        bookID = exist_databook(book_data, cursor)
-        old_name_cover = get_name_cover(bookID, cursor)
-        if bookID:
-            handle_duplicate_isbn(bookID, book_data, name_cover, driver)
-            success(f"- [ 4 ] The book data has been update correctly, with ID : {bookID}")
-            time.sleep(0.5)
-            rbar.update(1)
-        else:
-            book_id = insert_databook(book_data, cursor, cnx)
-            if book_id:
-                insert_nameCover(name_cover, book_id, cursor, cnx)
-            else:
-                rbar.close()
-                warning(f"[ ERROR ], The BOOK with ID : {book_id} does not exist")
-            success(f"- [ 4 ] The book data has been added correctly, with ID : {book_id}")
-            time.sleep(0.5)
-            rbar.update(1)
-        yield
-        
-        # Eliminar información del libro
-        response_redis = delete_book_redis(bookID)
-        if response_redis:
-            success(f"- [ 5 ] Eliminados datos en redis.")
-            time.sleep(0.5)
-            rbar.update(1)
-        yield
-        
-        # Subir cover a MINIO
-        if name_cover is not None:
-            response_cover = add_cover_minio(old_name_cover, name_cover)
-            if response_cover:
-                success(f"- [ 6 ] Cover data upload MINIO, name cover is : {name_cover}.")
+        try:
+            book_data = extract_data(data_book)
+            if book_data:
+                success("[ 1 ] Datos extraidos con éxito.")
                 time.sleep(0.5)
                 rbar.update(1)
-        else:
-            warning(f"Error al subir cover.")
+        except:
             rbar.close()
-        rbar.close()
+            error("[ 1 ] Error al extraer datos.")
+            driver.quit()
+            sys.exit(1)
+        yield
+        
+        try:
+            dao = DAO()
+            dao.connect_database()
+            time.sleep(0.5)
+            rbar.update(1)
+        except MySQLConnectionError as ex:
+            rbar.close()
+            error("[ 2 ] Error de integridad:", ex)
+            driver.quit()
+            sys.exit(1)
+        yield
+        
+        try:
+            name_cover = extract_nameCover(book_data['cover'])
+            if name_cover:
+                success(f"[ 3 ] Cover {name_cover} descargado con éxito.")
+                time.sleep(0.5)
+                rbar.update(1)
+        except:
+            rbar.close()
+            error(f"[ 3 ] Error al descargar Cover.")
+            driver.quit()
+            sys.exit(1)
+        yield
+        
+        try:
+            bookID = dao.exist_databook(book_data)
+            old_name_cover = dao.get_name_cover(bookID)
+            if bookID:
+                handle_duplicate_isbn(bookID, book_data, name_cover, driver)
+                success(f"[ 4 ] The book data has been update correctly, with ID : {bookID}")
+                time.sleep(0.5)
+                rbar.update(1)
+            else:
+                book_id = dao.insert_databook(book_data)
+                if book_id:
+                    dao.insert_nameCover(name_cover, book_id)
+                else:
+                    rbar.close()
+                    error("[ ERROR ], The BOOK with ID : {} does not exist".format(book_id))
+                success(f"[ 4 ] The book data has been added correctly, with ID : {book_id}")
+                time.sleep(0.5)
+                rbar.update(1)
+        except:
+            rbar.close()
+            driver.quit()
+            sys.exit(1)
+        yield
+        
+        try:
+            response_redis = delete_book_redis(bookID)
+            if response_redis:
+                success(f"[ 5 ] Eliminados datos en redis.")
+                time.sleep(0.5)
+                rbar.update(1)
+        except:
+            rbar.close()
+            driver.quit()
+            sys.exit(1)
+        yield
+        
+        try:
+            if name_cover is not None:
+                response_cover = add_cover_minio(old_name_cover, name_cover)
+                if response_cover:
+                    success(f"[ 6 ] Cover data upload MINIO BUCKET {config('BUCKET_NAME')}, name cover is : {name_cover}.")
+                    time.sleep(0.5)
+                    rbar.update(1)
+                else:
+                    error(f"[ 6 ] Error al subir cover a BUCKET {config('BUCKET_NAME')}.")
+                    rbar.close()
+            rbar.close()
+        except:
+            rbar.close()
+            driver.quit()
+            sys.exit(1)
     yield
 
-def get_name_cover(bookID, cursor):
-    try:
-        select_name_cover = "SELECT nameCover FROM coverBooks WHERE bookID = %s"
-        data_bookID = (bookID,)
-        cursor.execute(select_name_cover, data_bookID)
-        result = cursor.fetchone()
-        if result:
-            return result[0]
-        else:
-            return None
-    except MySQLConnectionError as e:
-        print("\n", colored("Error de integridad:", "red"), e.msg)
-
-def exist_databook(book_data, cursor):
-    try:
-        select_book = "SELECT bookID FROM books WHERE isbn = %s"
-        data_isbn = (book_data["isbn"],)
-        cursor.execute(select_book, data_isbn)
-        result = cursor.fetchone()
-        if result:
-            return result[0]
-        else:
-            return None
-    except MySQLConnectionError as e:
-        print("\n", colored("Error de integridad:", "red"), e.msg)
-
-def insert_databook(book_data, cursor, cnx):
-    try:
-        query = ("INSERT INTO books "
-                            "(title, author, editorial, isbn, type, language) "
-                            "VALUES (%s, %s, %s, %s, %s, %s)")
-        value = (book_data["title"], book_data["author"], book_data["editorial"], book_data["isbn"], book_data["type"], book_data["language"])
-        cursor.execute(query, value)
-        cnx.commit()
-        book_id = cursor.lastrowid
-    except MySQLConnectionError as e:
-        print("\n", colored("Error de integridad:", "red"), e.msg)
-    return book_id
-
-def update_databook(idBook, book_data, cursor_db, cnx):
-    bookID = idBook
-    cursor = cursor_db
-    dataBook = book_data
-    try:
-        query = ("UPDATE books SET title=%s, author=%s, editorial=%s, isbn=%s, type=%s, language=%s WHERE bookID=%s")
-        value = (dataBook["title"], dataBook["author"], dataBook["editorial"], dataBook["isbn"], dataBook["type"], dataBook["language"], bookID)
-        cursor.execute(query, value)
-        cnx.commit()
-    except MySQLConnectionError as e:
-        print("\n", colored("Error de integridad:", "red"), e.msg)
-    return True
-
 def add_book_bd(data, driver):
-    print("\n")
     info("Analizando datos....")
     with tqdm(total=5) as abar:
         link_book = data['view']
@@ -504,7 +470,7 @@ def add_book_bd(data, driver):
         data_cover = ''
         url_cover = ''
         try:
-            data_title = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, './/*[@id="app"]/div[1]/main/div/div/div/div[3]/div/div[2]/div/h1')))
+            data_title = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, './/*[@id="app"]/div[1]/main/div/div/div/div[3]//div[contains(@class, "product-info")]//h1')))
             title = capitalizar_palabras(data_title.text)
         except TimeoutException:
                 title = ''
@@ -514,49 +480,53 @@ def add_book_bd(data, driver):
         except TimeoutException:
                 category = ''
         try:
-            data_cover = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, './/*[@id="app"]/div[1]/main/div/div/div/div[3]/div/div[1]/div[1]/div/div/div/img')))
+            data_cover = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, '//*[@id="app"]/div[1]/main/div/div/div/div[3]//div[contains(@class, "swiper-img-container")]//img')))
         except TimeoutException:
-            try:
-                data_cover = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, './/*[@id="app"]/div[1]/main/div/div/div/div[3]/div/div[1]/div[2]/div/div/div/img')))
-            except TimeoutException:
-                data_cover = ''
+            data_cover = ''
+
         if data_cover:
             url_cover = data_cover.get_attribute("srcset").split(",")[-1].split(" ")[0]
         abar.update(1)
-        xpath_list = ['//*[@id="app"]/div[1]/main/div/div/div/div[7]/div/div[3]', 
-                    '//*[@id="app"]/div[1]/main/div/div/div/div[6]/div/div[3]', 
-                    '//*[@id="app"]/div[1]/main/div/div/div/div[4]/div/div[3]']
-        data_sheet = None
-        for xpath in xpath_list:
-            try:
-                data_sheet = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, xpath)))
-                abar.update(1)
-                break
-            except TimeoutException:
-                pass
-            
+        
+        book = []
         resultados = []
-        if data_sheet is not None:
-            rows = data_sheet.find_elements(By.XPATH, './/div[@class="row text-body-2 no-gutters"]')
-            tech_specs = {}
-            for row in rows:
-                name = row.find_element(By.XPATH, './/span/strong').text
-                value = row.find_element(By.XPATH, './/div[@class="col col-6"][2]/span')
-                tech_specs[name] = value.text
-            isbn = tech_specs.get('ISBN:', '')
-            idioma = tech_specs.get('Idioma:', '')
-            editorial = tech_specs.get('Editorial:', '')
+        isbn = None
+        idioma = None
+        editorial = None
+        
+        try:
+            elementos = WebDriverWait(driver, 5).until(EC.presence_of_all_elements_located((By.XPATH, '//*[@id="app"]/div[1]/main/div/div/div/div[7]//div[contains(@class,"border-left")]//div[@class="hidden-sm-and-down"]//span')))
+        except TimeoutException:
+            try:
+                elementos = WebDriverWait(driver, 5).until(EC.presence_of_all_elements_located((By.XPATH, '//*[@id="app"]/div[1]/main/div/div/div/div[6]//div[contains(@class,"border-left")]//div[@class="hidden-sm-and-down"]//span')))
+            except TimeoutException:
+                try:
+                    elementos = WebDriverWait(driver, 5).until(EC.presence_of_all_elements_located((By.XPATH, '//*[@id="app"]/div[1]/main/div/div/div/div[4]//div[contains(@class,"border-left")]//div[@class="hidden-sm-and-down"]//span')))
+                except TimeoutException:
+                    elementos = ''
+        time.sleep(0.5)
+        if elementos:
+            for elemento in elementos:
+                valor = elemento.text.strip() # elimina espacios en blanco al inicio y final
+                if valor: # verifica si el valor no está vacío
+                    book.append(valor)      
+            for i in range(len(book)):
+                if book[i] == "ISBN:":
+                    isbn = book[i+1]
+                if book[i] == "Idioma:":
+                    idioma = book[i+1]
+                if book[i] == "Editorial:":
+                    editorial = book[i+1]
             resultados.append({'isbn': isbn, 'language': capitalizar_palabras(idioma), 'editorial': capitalizar_palabras(editorial), 'title': title, 'author': author, 'category': category, 'cover': url_cover})
-            abar.update(1)
             if not resultados:
-                print(colored('No se encontraron resultados.', color_error))
+                warning('No se encontraron resultados.')
                 abar.close()
             else:
                 abar.close()
                 tareas = [data_operation(resultados, driver)]
                 loop(tareas)
         else:
-            print(colored('No se pudo encontrar la hoja técnica.', color_error))
+            warning('No se pudo encontrar la hoja técnica.')
             abar.close()
             
 def select_book(data, df, driver):
@@ -582,7 +552,7 @@ def select_book(data, df, driver):
                     return choice
         except ValueError:
             print("\n\t" , colored(f"La opción {user_input} no es válida. Por favor, ingrese un número entre ", color_error) + colored("0", color_out) + colored(f" y {len(data) - 1}", color_out) + colored(" o ",color_error) + colored("X ", color_warning) + colored("para salir.", color_error))
-
+            
 def scraping(element, driver):
     articles = []
     with tqdm(total=3) as sbar:
@@ -607,10 +577,10 @@ def scraping(element, driver):
                 boton_element.click()
                 sbar.update(1)
             except TimeoutException:
-                print(colored('El elemento no está disponible para interactuar.', color_error))
+                warning('El elemento no está disponible para interactuar.')
                 pass
             except ElementClickInterceptedException:
-                print(colored('El elemento está oculto y no se puede hacer clic en él.', color_error))
+                warning('El elemento está oculto y no se puede hacer clic en él.')
                 pass
             driver.implicitly_wait(5)
             try:
@@ -630,7 +600,7 @@ def scraping(element, driver):
                 else:
                     articles = []
             except TimeoutException:
-                print(colored('El elemento no está disponible para interactuar.', color_warning))
+                warning('El elemento no está disponible para interactuar.')
         except:
             sbar.close()
             raise
@@ -670,50 +640,42 @@ def scraping(element, driver):
             for k, v in d.items():
                 dict_articles_data.setdefault(k, []).append(v)
         df = pd.DataFrame.from_dict(dict_articles_data)
-        print("\n\033[33mCargando datos....\033[0m")
+        info("Cargando datos....")
         for i in trange(5, unit="s", unit_scale=0.1, unit_divisor=1):
             time.sleep(0.2)
         select_book(list_articles_data, df, driver)
     else :
-        print(colored('No se pudo encontrar el elemento deseado.', color_error))
+        warning('No se pudo encontrar el elemento deseado.')
 
-    #Cerramos session en selenium
-    time.sleep(5)
-    driver.quit()
+    try:
+        driver.quit()
+    except InvalidSessionIdException:
+        pass
 
 def findBook(data, driver, parser_find):
-    title   = data[0] if data[0] is not None else ''
-    author  = data[1] if data[1] is not None else ''
-    isbn    = data[2] if data[2] is not None else ''
-    data_element = ' '.join([title, author, isbn])
-    
-    if (title == '' and author == '' and isbn == ''):
+    data_find = data
+    data_element = ' '.join(data_find)
+    if (data_find == ''):
         parser_find.print_help()
         driver.quit()
     else:
-        print("\n" + f"{colored('El libro a buscar es', color_key, attrs=['bold'])} --> {colored('Title: ', color_key)} --> {colored({title}, color_value)}, {colored('Author:', color_key)} --> {colored(author, color_value)}, {colored('isbn:', color_key)} --> {colored(isbn, color_value)}")
-        print("\033[33m\nBuscando datos....\033[0m")
+        print("\n" + f"{colored('The search pattern is', color_key, attrs=['bold'])} --> {colored({data_element}, color_value)}")
+        info("Buscando datos....")
         scraping(data_element, driver)            
 
-def initContainer(args, parser_find, driver=None):
-    match args.command:
+def initContainer(command, container):
+    match command:
         case "update":
-            print(f"El comando que ejecutas es : {args.command} y el contenedor : {args.container}")
+            log(f"El comando que ejecutas es : {command} y el contenedor : {container}")
         case "stop":
-            print(f"El comando que ejecutas es : {args.command} y el contenedor : {args.container}")
-        case "reset":
-            print(f"El comando que ejecutas es : {args.command} y el contenedor : {args.container}")
-        case "find":
-            if driver is None:
-                print("No arguments provided. Skipping Selenium initialization.")
-            else:
-                flags = []
-                flags.append(args.title)
-                flags.append(args.author)
-                flags.append(args.isbn)
-                findBook(flags, driver, parser_find)
+            log(f"El comando que ejecutas es : {command} y el contenedor : {container}")
+        case "restart":
+            log(f"El comando que ejecutas es : {command} y el contenedor : {container}")
+        case "status":
+            log(f"El comando que ejecutas es : {command} y el contenedor : {container}")
         case _:
-            print(f"El comando que ejecutas es : {args.command} y el contenedor : {args.container}")
+            error("E:","Debe dar al menos un patrón de búsqueda. Use -h para ver la ayuda.")
+            sys.exit(1)
 
 if __name__=='__main__':
     main()

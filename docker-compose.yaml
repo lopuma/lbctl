@@ -11,6 +11,8 @@ services:
         environment:
             COVER_DIR: ${COVER_DIR}
             WEBDRIVER_HOST: ${WEBDRIVER_HOST}
+            WEBDRIVER_PORT_CLI: ${WEBDRIVER_PORT_CLI}
+            WEBDRIVER_PORT_WEB: ${WEBDRIVER_PORT_WEB}
             MYSQL_HOST: ${MYSQL_HOST}
             MYSQL_USER: ${MYSQL_USER}
             MYSQL_PASSWORD: ${MYSQL_PASSWORD}
@@ -28,9 +30,8 @@ services:
             MINIO_CONSOLE_PORT: ${MINIO_CONSOLE_PORT}
             MINIO_PASSWORD: ${MINIO_PASSWORD}
         volumes: 
-          - ${COVER_DIR}:/app/covers-liburutegia
+          - ${COVER_DIR}:/app/${BUCKET_NAME}
         #     - ${COVER_DIR}:/app/covers-prueba
         networks:
             - ntk-app
-        command: "sh -c '$$@'"
 
