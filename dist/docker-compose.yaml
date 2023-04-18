@@ -2,7 +2,7 @@ version: '3.7'
 services:
     lbctl-liburutegia:
         container_name: lbctl-liburutegia
-        build: .
+        image: lopuma/lbctl-liburutegia:latest
         restart: always
         environment:
             COVER_DIR: ${COVER_DIR}
@@ -27,6 +27,3 @@ services:
             MINIO_PASSWORD: ${MINIO_PASSWORD}
         volumes: 
           - ${COVER_DIR}:/app/${BUCKET_NAME}
-        networks:
-            - ntk-app
-

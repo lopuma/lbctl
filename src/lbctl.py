@@ -35,31 +35,6 @@ port = config('WEBDRIVER_PORT_CLI')
 port = int(port)
 
 def main():
-    
-    # Crea un objeto socket
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    # Establece un tiempo de espera para la conexión
-    client_socket.settimeout(5)
-
-    # Intenta conectarse al host
-    try:
-        client_socket.connect((host, port))
-        print("\n")
-        print(f"Conexión exitosa a SELENIUM http://{host}:{config('WEBDRIVER_PORT_WEB')}")
-    except socket.error as err:
-        print(f"No se pudo conectar a SELENIUM http://{host}:{config('WEBDRIVER_PORT_WEB')}. Error: {err}")
-        return
-    finally:
-        # Cierra la conexión
-        client_socket.close()
-    
-    options = webdriver.FirefoxOptions()
-    options.add_argument('--start-maximized')
-    options.add_argument('--disable-extensions')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-gpu')
 
     parser = argparse.ArgumentParser(
         prog="lbctl",
@@ -71,6 +46,7 @@ def main():
         ''',
         epilog='Use "lbctl -h / --help" for more information about a given command.'
     )
+    
     parser.add_argument(
         '-v', '--version',
         action='version',
@@ -139,53 +115,84 @@ def main():
     )
 
     args = parser.parse_args()
-    
-    
-    if args is None:
-        parser.print_help()
-    elif hasattr(args, 'query'):
-        if args.query:
-            try:
-                driver = webdriver.Remote(
-                    command_executor='http://{}:4444/wd/hub'.format(config('WEBDRIVER_HOST')),
-                    options=options,
-                )
-                findBook(args.query, driver, parser)
-            except WebDriverException:
+
+    if args.command is None:
+        version = parser.parse_args(['-v']).version
+        log(version)
+        return
+    if not (hasattr(args, 'v') and args.v or hasattr(args, 'h') and args.h):
+        ## Crea un objeto socket
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        ## Establece un tiempo de espera para la conexión
+        client_socket.settimeout(5)
+
+        ## Intenta conectarse al host
+        try:
+            client_socket.connect((host, port))
+            print("\n")
+            print(f"Conexión exitosa a SELENIUM http://{host}:{config('WEBDRIVER_PORT_WEB')}")
+        except socket.error as err:
+            print(f"No se pudo conectar a SELENIUM http://{host}:{config('WEBDRIVER_PORT_WEB')}. Error: {err}")
+            return
+        finally:
+            ## Cierra la conexión
+            client_socket.close()
+        
+        if args is None:
+            parser.print_help()
+        elif hasattr(args, 'query'):
+            if args.query:
                 try:
-                    driver.quit()
-                except InvalidSessionIdException:
-                    pass
-                # TODO ERROR
-                # warning("No se ha encontrado ninguna sesión activa")
-                # driver = webdriver.Firefox()
+                    options = webdriver.FirefoxOptions()
+                    options.add_argument('--start-maximized')
+                    options.add_argument('--disable-extensions')
+                    options.add_argument('--disable-dev-shm-usage')
+                    options.add_argument('--no-sandbox')
+                    options.add_argument('--disable-gpu')
+                    driver = webdriver.Remote(
+                        command_executor='http://{}:4444/wd/hub'.format(config('WEBDRIVER_HOST')),
+                        options=options,
+                    )
+                    findBook(args.query, driver, parser)
+                except WebDriverException:
+                    try:
+                        driver.quit()
+                    except InvalidSessionIdException:
+                        pass
+                    ## TODO ERROR
+                    warning("No se ha encontrado ninguna sesión activa")
+                    driver = webdriver.Firefox()
+            else:
+                error("E:","Debe dar al menos un patrón de búsqueda. Use -h para ver la ayuda.")
+                sys.exit(1)
+        elif args.command == "status":
+            if not args.container:
+                error("E:","Debe dar al menos un patrón de búsqueda. Use -h para ver la ayuda.")
+                sys.exit(1)
+            else:
+                initContainer(args.command, args.container)
+        elif args.command == "update":
+            if not args.container:
+                error("E:","Debe dar al menos un patrón de búsqueda. Use -h para ver la ayuda.")
+                sys.exit(1)
+            else:
+                initContainer(args.command, args.container)
+        elif args.command == "restart":
+            if not args.container:
+                error("E:","Debe dar al menos un patrón de búsqueda. Use -h para ver la ayuda.")
+                sys.exit(1)
+            else:
+                initContainer(args.command, args.container)
+        elif args.command == "stop":
+            if not args.container:
+                error("E:","Debe dar al menos un patrón de búsqueda. Use -h para ver la ayuda.")
+                sys.exit(1)
+            else:
+                initContainer(args.command, args.container)
         else:
-            error("E:","Debe dar al menos un patrón de búsqueda. Use -h para ver la ayuda.")
-            sys.exit(1)
-    elif args.command == "status":
-        if not args.container:
-            error("E:","Debe dar al menos un patrón de búsqueda. Use -h para ver la ayuda.")
-            sys.exit(1)
-        else:
-            initContainer(args.command, args.container)
-    elif args.command == "update":
-        if not args.container:
-            error("E:","Debe dar al menos un patrón de búsqueda. Use -h para ver la ayuda.")
-            sys.exit(1)
-        else:
-            initContainer(args.command, args.container)
-    elif args.command == "restart":
-        if not args.container:
-            error("E:","Debe dar al menos un patrón de búsqueda. Use -h para ver la ayuda.")
-            sys.exit(1)
-        else:
-            initContainer(args.command, args.container)
-    elif args.command == "stop":
-        if not args.container:
-            error("E:","Debe dar al menos un patrón de búsqueda. Use -h para ver la ayuda.")
-            sys.exit(1)
-        else:
-            initContainer(args.command, args.container)
+            version = parser.parse_args(['-v']).version
+            log(version)
     else:
         version = parser.parse_args(['-v']).version
         log(version)

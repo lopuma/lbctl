@@ -93,8 +93,11 @@ Antes de utilizar el proyecto, debes configurar las variables de entorno necesar
 
 - #### Añade lo siguiente.
 
+Exportamos el fichero docker-compose a una variable global, **se debe especificar el path completo**, luego creamos un alias
 ```
-alias lbctl='docker-compose run --rm --name lbctl-liburutegia lbctl-liburutegia "$@"'
+$ export COMPOSE_FILE="/home/USERNAME/lbctl/docker-compose.yaml"
+
+$ alias lbctl='docker-compose run -e MY_USER -e BUCKET_NAME --rm --name lbctl-liburutegia lbctl-liburutegia "$@"'
 ```
 
 _Este comando crea un alias lbctl que ejecuta el contenedor de Docker, la primera vez construira el contenedor._
