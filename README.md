@@ -76,7 +76,7 @@ Antes de utilizar el proyecto, debes configurar las variables de entorno necesar
 <a name="pasos"></a>
 ## Pasos comunes
 
-- Descarga el archivo docker-compose.yml del proyecto [Liburutegia control](https://github.com/lopuma/lbctl).
+- Descarga el archivo docker-compose.yml del proyecto lbctl [Descargar archivo docker-compose.yaml](https://github.com/lopuma/lbctl/raw/master/dist/docker-compose.yaml)
 
 - Modifica los valores de las variables de entorno en el archivo .env de acuerdo a tus necesidades.
 
