@@ -108,9 +108,9 @@ _Modificar la ruta del fichero env_file y la network._
 
     Exportamos el fichero docker-compose a una variable global, **se debe especificar el path completo**, luego creamos un alias
     ```
-    $ export COMPOSE_FILE="/home/$USER/example/docker-compose.yaml"
+    export COMPOSE_FILE="/home/$USER/example/docker-compose.yaml"
 
-    $ alias lbctl='docker-compose run -e MY_USER -e BUCKET_NAME --rm --name lbctl-liburutegia lbctl-liburutegia "$@"'
+    alias lbctl='docker-compose run -e MY_USER -e BUCKET_NAME --rm --name lbctl-liburutegia lbctl-liburutegia "$@"'
     ```
 
     _Este comando crea un alias lbctl que ejecuta el contenedor de Docker, la primera vez construira el contenedor._
@@ -139,7 +139,7 @@ _Modificar la ruta del fichero env_file y la network._
 
     ```
     #!/bin/bash
-    docker-compose run -e MY_USER -e BUCKET_NAME --rm --name lbctl-liburutegia lbctl-liburutegia "$@"
+    docker-compose run --rm --name lbctl-liburutegia lbctl-liburutegia "$@"
     ```
     _La ultima linea_
 
