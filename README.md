@@ -63,90 +63,127 @@ Puedes utilizar una de las siguientes opciones:
 <a name="configuracion"></a>
 ## Configuración
 
-Antes de utilizar el proyecto, debes configurar las variables de entorno necesarias. Para ello debes tener configurado un fichero .env, se puede utilizar el mismo fichero .env utilizado en el proyecto web **Liburutegia**, añadiendo las siguientes variables.
+Antes de utilizar el proyecto, debes configurar las variables de entorno necesarias. Para ello debes tener configurado un fichero ***.env***, se puede utilizar el mismo fichero ***.env*** utilizado en el proyecto web **Liburutegia**, añadiendo las siguientes variables.
 
+
+### WebDriver
 ```
-# WebDriver
-- COVER_DIR: es el directorio en el que se encuentran las imágenes de portada para los libros de Liburutegia.
-- WEBDRIVER_HOST: es el nombre del host donde se ejecuta el servicio de WebDriver, el cual se utiliza para realizar pruebas automatizadas en la aplicación.
+COVER_DIR: es el directorio en el que se encuentran las imágenes de portada para los libros de Liburutegia.
 
-# MySql
-- MYSQL_USER: es el nombre de usuario de la base de datos MySQL que utiliza la aplicación.
+MY_USER: Usuario con el que se construira el contenedor del proyecto lbctl
+
+WEBDRIVER_HOST: es el nombre del host donde se ejecuta el servicio de WebDriver, el cual se utiliza para realizar pruebas automatizadas en la aplicación.
+
+WEBDRIVER_DRIVER: el navegador web que se utilizará para la automatización de pruebas. Las opciones son "firefox", "chrome" o "edge".
+
+WEBDRIVER_PORT_CLI: el puerto en el que se ejecutará el servidor Selenium para la comunicación cliente-servidor.
+
+WEBDRIVER_PORT_WEB: el puerto en el que se ejecutará el servidor Selenium para la interacción con el navegador web.
+```
+### MySql
+```
+MYSQL_USER: es el nombre de usuario de la base de datos MySQL que utiliza la aplicación.
 ```
 <a name="pasos"></a>
 ## Pasos comunes
 
-- Descarga el archivo docker-compose.yml del proyecto lbctl [Descargar archivo docker-compose.yaml](https://github.com/lopuma/lbctl/raw/master/dist/docker-compose.yaml)
+- Descarga el archivo docker-compose.yml del proyecto lbctl :point_right: [Descargar archivo docker-compose.yaml](https://github.com/lopuma/lbctl/raw/master/dist/docker-compose.yaml) :arrow_down:.
+_Modificar la ruta del fichero env_file y la network._
 
-- Modifica los valores de las variables de entorno en el archivo .env de acuerdo a tus necesidades.
+- Modificar los valores de las variables de entorno en el archivo ***.env*** de acuerdo a tus necesidades. **(Tambien se pueden descargar un ejemplo de las variables que usa este proyecto :point_right:  [Descargar archivo .env](https://github.com/lopuma/lbctl/raw/master/dist/.env_example))**, importante que sea ***.env***, remplazar el nombre del fichero :arrow_down: .
 
 - En una terminal o consola, navega hasta la carpeta donde descargaste el archivo docker-compose.yml.
 
 <a name="linux"></a>
 ### Puedes seguir estas 2 opciones para Linux
 
-1. **Crea un alias en tu archivo .bashrc:**
+## OPCION 1
+- **Crea un alias en tu archivo .bashrc:**
 
-- #### Editar .bashrc.
+    - #### Editar .bashrc.
 
-> sudo vi ~/.bashrc
+    > sudo vi ~/.bashrc
 
-- #### Añade lo siguiente.
+    - #### Añade lo siguiente.
 
-Exportamos el fichero docker-compose a una variable global, **se debe especificar el path completo**, luego creamos un alias
-```
-$ export COMPOSE_FILE="/home/USERNAME/lbctl/docker-compose.yaml"
+    Exportamos el fichero docker-compose a una variable global, **se debe especificar el path completo**, luego creamos un alias
+    ```
+    $ export COMPOSE_FILE="/home/$USER/example/docker-compose.yaml"
 
-$ alias lbctl='docker-compose run -e MY_USER -e BUCKET_NAME --rm --name lbctl-liburutegia lbctl-liburutegia "$@"'
-```
+    $ alias lbctl='docker-compose run -e MY_USER -e BUCKET_NAME --rm --name lbctl-liburutegia lbctl-liburutegia "$@"'
+    ```
 
-_Este comando crea un alias lbctl que ejecuta el contenedor de Docker, la primera vez construira el contenedor._
+    _Este comando crea un alias lbctl que ejecuta el contenedor de Docker, la primera vez construira el contenedor._
 
-- Recarga tu archivo .bashrc con el comando ``source ~/.bashrc``
+    - Recarga tu archivo .bashrc con el comando ``source ~/.bashrc``
 
-- Ahora puedes utilizar el comando lbctl seguido de los parámetros que desees. Por ejemplo:
+    - Ahora puedes utilizar el comando lbctl seguido de los parámetros que desees. Por ejemplo:
 
-```
-lbctl find -t Pokemon
-```
+    ```
+    lbctl find -t Pokemon
+    ```
 
-2. **Crea un archivo de script en /usr/local/bin/ utilizando el siguiente comando:**
+    _La primera vez, se recomienda usar solo el comando_ `lbctl` _, sin parametros para crear el contenedor, la salida debe ser la version del proyecto_
 
-```
-sudo vi /usr/local/bin/lbctl
-```
-- #### Copia y pega el siguiente código en el archivo y guarda los cambios:
+    ```
+    lbctl 1.0.0 Linux (x86_64)
+    ```
 
-```
-#!/bin/bash
-docker-compose run --rm --name lbctl-liburutegia lbctl-liburutegia "$@"
-```
+## OPCION 2
+- **Crea un archivo de script en /usr/local/bin/ utilizando el siguiente comando:**
 
-_La ultima linea_
+    ```
+    sudo vi /usr/local/bin/lbctl
+    ```
+    - #### Copia y pega el siguiente código en el archivo y guarda los cambios:
 
-```
-El comando docker-compose run se utiliza para ejecutar un comando en un servicio específico de Docker Compose.
+    ```
+    #!/bin/bash
+    docker-compose run -e MY_USER -e BUCKET_NAME --rm --name lbctl-liburutegia lbctl-liburutegia "$@"
+    ```
+    _La ultima linea_
 
-En este caso, el comando se está ejecutando con las siguientes opciones:
+    ```
+    El comando docker-compose run se utiliza para ejecutar un comando en un servicio específico de Docker Compose.
 
---rm: elimina el contenedor después de que se detiene el proceso de ejecución del comando.
---name: le da un nombre al contenedor que se está creando. En este caso, el nombre es lbctl-liburutegia.
-lbctl-liburutegia: es el nombre del servicio de Docker Compose que se va a utilizar para ejecutar el comando.
-Por lo tanto, el comando completo docker-compose run --rm --name lbctl-liburutegia lbctl-liburutegia está ejecutando un comando en el servicio lbctl-liburutegia y se está creando un contenedor con el mismo nombre. El contenedor se eliminará automáticamente cuando se detenga el proceso de ejecución del comando.
+    En este caso, el comando se está ejecutando con las siguientes opciones:
 
-"$@" : espera mas parametros
-```
+    --rm: elimina el contenedor después de que se detiene el proceso de ejecución del comando.
+    --name: le da un nombre al contenedor que se está creando. En este caso, el nombre es lbctl-liburutegia.
+    lbctl-liburutegia: es el nombre del servicio de Docker Compose que se va a utilizar para ejecutar el comando.
+    Por lo tanto, el comando completo docker-compose run --rm --name lbctl-liburutegia lbctl-liburutegia está ejecutando un comando en el servicio lbctl-liburutegia y se está creando un contenedor con el mismo nombre. El contenedor se eliminará automáticamente cuando se detenga el proceso de ejecución del comando.
 
-- #### Dale permisos de ejecución al script:
+    "$@" : espera mas parametros
+    ```
 
-```
-sudo chmod +x /usr/local/bin/lbctl
-```
-- #### Ahora puedes ejecutar el script en cualquier lugar utilizando el siguiente comando:
+    - #### Dale permisos de ejecución al script:
 
-```
-lbctl find -t Pokemon
-```
+    ```
+    sudo chmod +x /usr/local/bin/lbctl
+    ```
+
+    - Exportamos el fichero docker-compose a una variable global, **se debe especificar el path completo**.
+
+    ```
+    $ export COMPOSE_FILE="/home/$USER/example/docker-compose.yaml"
+    ```
+    
+    - #### Ahora puedes ejecutar el script en cualquier lugar utilizando el siguiente comando:
+
+    ```
+    lbctl find -t Pokemon
+    ```
+
+    _La primera vez, se recomienda usar solo el comando_ `lbctl` _, sin parametros para crear el contenedor, la salida debe ser la version del proyecto_
+
+    ```
+    lbctl 1.0.0 Linux (x86_64)
+    ```
+
+    ## Para Linux, puedes usar el siguiente comando, y realizar los pasos anteriores:
+
+    > sudo curl -L https://raw.githubusercontent.com/lopuma/lbctl/master/dist/lbctl.sh -o /usr/local/bin/lbctl && sudo chmod +x /usr/local/bin/lbctl && lbctl
+
 <a name="windows"></a>
 ### Puedes seguir estas opciones para Windows
 
