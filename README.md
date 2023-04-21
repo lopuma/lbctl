@@ -74,7 +74,7 @@ MY_USER: Usuario con el que se construira el contenedor del proyecto lbctl
 
 WEBDRIVER_HOST: es el nombre del host donde se ejecuta el servicio de WebDriver, el cual se utiliza para realizar pruebas automatizadas en la aplicación.
 
-WEBDRIVER_DRIVER: el navegador web que se utilizará para la automatización de pruebas. Las opciones son "firefox", "chrome" o "edge".
+WEBDRIVER_STANDALONE: el navegador web que se utilizará para la automatización de pruebas. Las opciones son "firefox", "chrome" o "edge".
 
 WEBDRIVER_PORT_CLI: el puerto en el que se ejecutará el servidor Selenium para la comunicación cliente-servidor.
 

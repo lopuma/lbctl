@@ -7,7 +7,7 @@ import os
 import random
 import platform
 import socket
-from utils.utils import success, info, warning, error, log, debug, select_option
+from utils.utils import success, info, warning, error, log, debug
 from database.mysql_connection import DAO, MySQLConnectionError
 from redis_db.redis_connection import r
 from minio_s3.minio_connection import client
@@ -34,8 +34,20 @@ host = config('WEBDRIVER_HOST')
 port = config('WEBDRIVER_PORT_CLI')
 port = int(port)
 
-def main():
+def convertir_a_minusculas(cadena):
+    cadena_en_mayusculas = cadena.upper()
+    nueva_cadena = ""
+    for letra in cadena:
+        if letra in cadena_en_mayusculas:
+            nueva_cadena += letra.lower()
+        else:
+            nueva_cadena += letra
+    return nueva_cadena
 
+standalone = convertir_a_minusculas(config('WEBDRIVER_STANDALONE'))
+options = ""
+
+def main():
     parser = argparse.ArgumentParser(
         prog="lbctl",
         usage='lbctl <command> [flags]',
@@ -120,49 +132,63 @@ def main():
         version = parser.parse_args(['-v']).version
         log(version)
         return
-    if not (hasattr(args, 'v') and args.v or hasattr(args, 'h') and args.h):
-        ## Crea un objeto socket
-        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-        ## Establece un tiempo de espera para la conexión
-        client_socket.settimeout(5)
-
-        ## Intenta conectarse al host
-        try:
-            client_socket.connect((host, port))
-            print("\n")
-            print(f"Conexión exitosa a SELENIUM http://{host}:{config('WEBDRIVER_PORT_WEB')}")
-        except socket.error as err:
-            print(f"No se pudo conectar a SELENIUM http://{host}:{config('WEBDRIVER_PORT_WEB')}. Error: {err}")
-            return
-        finally:
-            ## Cierra la conexión
-            client_socket.close()
-        
-        if args is None:
-            parser.print_help()
-        elif hasattr(args, 'query'):
+    if not (hasattr(args, 'v') and args.v or hasattr(args, 'h') and args.h):        
+        if hasattr(args, 'query'):
             if args.query:
-                try:
+                
+                if (standalone == 'firefox'):
                     options = webdriver.FirefoxOptions()
                     options.add_argument('--start-maximized')
                     options.add_argument('--disable-extensions')
                     options.add_argument('--disable-dev-shm-usage')
                     options.add_argument('--no-sandbox')
                     options.add_argument('--disable-gpu')
+                elif (standalone == 'chrome'):
+                    options = webdriver.ChromeOptions()
+                    options.add_argument('--start-maximized')
+                    options.add_argument('--disable-extensions')
+                    options.add_argument('--disable-dev-shm-usage')
+                    options.add_argument('--no-sandbox')
+                    options.add_argument('--disable-gpu')
+                elif (standalone == 'edge'):
+                    options = webdriver.EdgeOptions()
+                    options.use_chromium = True
+                    options.add_argument('--start-maximized')
+                    options.add_argument('--disable-extensions')
+                    options.add_argument('--disable-dev-shm-usage')
+                    options.add_argument('--no-sandbox')
+                    options.add_argument('--disable-gpu')
+                else:
+                    error('Por favor revisar el nombre la variable STANDALONE, elegir una entre: ', '["firefox", "chrome", "edge"]')
+                    sys.exit(1)
+                
+                ## Crea un objeto socket
+                client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+                ## Establece un tiempo de espera para la conexión
+                client_socket.settimeout(5)
+
+                ## Intenta conectarse al host
+                try:
+                    client_socket.connect((host, port))
+                    print("\n")
+                    print(f"Conexión exitosa a SELENIUM http://{host}:{config('WEBDRIVER_PORT_WEB')}/?autoconnect=1&resize=scale&password=secret")
+                except socket.error as err:
+                    print("\n")
+                    print(f"No se pudo conectar a SELENIUM http://{host}:{config('WEBDRIVER_PORT_WEB')}. Error: {err}")
+                    return
+                finally:
+                    client_socket.close()
+                try:
+                    
                     driver = webdriver.Remote(
-                        command_executor='http://{}:4444/wd/hub'.format(config('WEBDRIVER_HOST')),
+                        command_executor='http://{}:{}/wd/hub'.format(host, port),
                         options=options,
                     )
                     findBook(args.query, driver, parser)
                 except WebDriverException:
-                    try:
-                        driver.quit()
-                    except InvalidSessionIdException:
-                        pass
-                    ## TODO ERROR
                     warning("No se ha encontrado ninguna sesión activa")
-                    driver = webdriver.Firefox()
+                    sys.exit(1)
             else:
                 error("E:","Debe dar al menos un patrón de búsqueda. Use -h para ver la ayuda.")
                 sys.exit(1)
@@ -467,33 +493,47 @@ def data_operation(resultados, driver):
 
 def add_book_bd(data, driver):
     info("Analizando datos....")
-    with tqdm(total=5) as abar:
-        link_book = data['view']
-        author = capitalizar_palabras(data['author'])
-        abar.update(1)
-        driver.get(link_book)
-        abar.update(1)
+    with tqdm(total=7) as abar:
         category = ''
         data_cover = ''
         url_cover = ''
+        link_book = data['view']
+        # Abrir el link
+        try:
+            driver.get(link_book)
+        except:
+            pass
+        # obtener el valor del author
+        try:
+            author = capitalizar_palabras(data['author'])
+            abar.update(1)
+        except:
+            pass
+        # obtener el valor del titulo
         try:
             data_title = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, './/*[@id="app"]/div[1]/main/div/div/div/div[3]//div[contains(@class, "product-info")]//h1')))
             title = capitalizar_palabras(data_title.text)
+            abar.update(1)
         except TimeoutException:
-                title = ''
+            title = ''
+        # Obtener el valor de categoria
         try:
             data_category = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, './/*[@id="breadcrumbs"]/div/div[2]/div[5]/a/span')))
             category = capitalizar_palabras(data_category.text)
+            abar.update(1)
         except TimeoutException:
-                category = ''
+            category = ''
+        # Obtener el cover
         try:
             data_cover = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, '//*[@id="app"]/div[1]/main/div/div/div/div[3]//div[contains(@class, "swiper-img-container")]//img')))
         except TimeoutException:
             data_cover = ''
-
+        # Si el cover existe, buscame el mas grande
         if data_cover:
             url_cover = data_cover.get_attribute("srcset").split(",")[-1].split(" ")[0]
-        abar.update(1)
+            abar.update(1)
+        else:
+            url_cover = None
         
         book = []
         resultados = []
@@ -511,7 +551,7 @@ def add_book_bd(data, driver):
                     elementos = WebDriverWait(driver, 5).until(EC.presence_of_all_elements_located((By.XPATH, '//*[@id="app"]/div[1]/main/div/div/div/div[4]//div[contains(@class,"border-left")]//div[@class="hidden-sm-and-down"]//span')))
                 except TimeoutException:
                     elementos = ''
-        time.sleep(0.5)
+        
         if elementos:
             for elemento in elementos:
                 valor = elemento.text.strip() # elimina espacios en blanco al inicio y final
@@ -520,11 +560,16 @@ def add_book_bd(data, driver):
             for i in range(len(book)):
                 if book[i] == "ISBN:":
                     isbn = book[i+1]
+                    abar.update(1)
                 if book[i] == "Idioma:":
                     idioma = book[i+1]
+                    abar.update(1)
                 if book[i] == "Editorial:":
                     editorial = book[i+1]
+                    abar.update(1)
+                    
             resultados.append({'isbn': isbn, 'language': capitalizar_palabras(idioma), 'editorial': capitalizar_palabras(editorial), 'title': title, 'author': author, 'category': category, 'cover': url_cover})
+            
             if not resultados:
                 warning('No se encontraron resultados.')
                 abar.close()
@@ -532,9 +577,11 @@ def add_book_bd(data, driver):
                 abar.close()
                 tareas = [data_operation(resultados, driver)]
                 loop(tareas)
+                
         else:
             warning('No se pudo encontrar la hoja técnica.')
             abar.close()
+            sys.exit(1)
             
 def select_book(data, df, driver):
     total_elements = len(df)
@@ -565,35 +612,34 @@ def scraping(element, driver):
     with tqdm(total=3) as sbar:
         try:
             driver.get('https://www.casadellibro.com/')
+            time.sleep(1)
             try:
                 cookies_button = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'button#onetrust-accept-btn-handler')))
-                try:
-                    cookies_button.click()
-                    sbar.update(1)
-                except NoSuchElementException:
-                    pass
+                cookies_button.click()
+                sbar.update(1)
             except TimeoutException:
+                sbar.close()
                 pass
-            driver.implicitly_wait(5)
+            except NoSuchElementException:
+                    sbar.close()
+                    pass
+            time.sleep(1)
             try:
                 input_element = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, '//*[@id="app"]/div[1]/div[1]/div[3]/div[1]/div[1]/input')))
                 input_element.click()
-                driver.implicitly_wait(5)
-                boton_element = driver.find_element(By.XPATH, '//*[@id="app"]/div[1]/div[1]/div[3]/div[1]/div[1]/button')
-                driver.implicitly_wait(5)
+                boton_element = driver.find_element(By.XPATH, '//*[@id="app"]/div[1]/div[1]/div[3]/div[1]/div[1]/button/span')
                 boton_element.click()
                 sbar.update(1)
             except TimeoutException:
                 warning('El elemento no está disponible para interactuar.')
-                pass
+                sbar.close()
             except ElementClickInterceptedException:
                 warning('El elemento está oculto y no se puede hacer clic en él.')
-                pass
-            driver.implicitly_wait(5)
+                sbar.close()
+            time.sleep(1)
             try:
                 input2_element = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, '//*[@id="empathy-x"]/header/div/div/input')))
                 input2_element.send_keys(element)
-                driver.implicitly_wait(5)
                 try:
                     element = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR,'section.ebx-grid.ebx-empathy-x__grid')))
                 except TimeoutException:
@@ -610,8 +656,8 @@ def scraping(element, driver):
                 warning('El elemento no está disponible para interactuar.')
         except:
             sbar.close()
-            raise
     list_articles_data = []
+    dict_articles_data = {}
     id = 0
     if articles:
         for article in articles:
@@ -631,7 +677,6 @@ def scraping(element, driver):
                 other = article.find_element(By.CSS_SELECTOR, ".ebx-result-binding-type").text.strip()
             except NoSuchElementException:
                 other = ''
-            
             dict_article_data = {}
             if any([len(title)>0, len(author)>0, len(link)>0, len(other)>0]):
                 dict_article_data["ID"] = id
@@ -639,9 +684,7 @@ def scraping(element, driver):
                 dict_article_data["author"] = author
                 dict_article_data["view"] = link
                 dict_article_data["other"] = other
-                
                 list_articles_data.append(dict_article_data)
-                dict_articles_data = {}
             id+=1
         for d in list_articles_data:
             for k, v in d.items():
@@ -653,7 +696,10 @@ def scraping(element, driver):
         select_book(list_articles_data, df, driver)
     else :
         warning('No se pudo encontrar el elemento deseado.')
-
+        sbar.close()
+        driver.quit()
+        sys.exit(1)
+        
     try:
         driver.quit()
     except InvalidSessionIdException:

@@ -21,12 +21,6 @@ class DAO():
             raise MySQLConnectionError(ex)
         except DatabaseError as ex:
             raise MySQLConnectionError(ex)
-            #print("Error al conectarse a la base de datos: ", e)
-            #print("Asegúrate de que el servidor de MySQL permita conexiones desde este host.")
-        # except mysql.connector.IntegrityError  as err:
-        #     if err.errno == 2003:
-        #         message = f"<1> No se pudo conectar al servidor MySQL al host : {config('MYSQL_HOST')} y puerto {config('MYSQL_PORT')} especificados. Por favor, revise el hosts o la dirección IP y el puerto."
-        #         raise MySQLConnectionError(message)
         
     def connect_database(self):
         if self.conexion.is_connected():
