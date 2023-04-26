@@ -22,11 +22,29 @@ class DAO():
         except DatabaseError as ex:
             raise MySQLConnectionError(ex)
         
+    def check_data(self, book_data):
+        if self.conexion.is_connected():
+            try:
+                cursor = self.conexion.cursor()
+                #select_book = "SELECT * FROM books WHERE isbn = %s"
+                select_book = "SELECT bookID, title, author, editorial, isbn, type, language, collection, DATE_FORMAT(purchase_date, '%Y-%m-%d') as purchase_date, observation, reserved, DATE_FORMAT(lastUpdate, '%Y-%m-%d') as lastUpdate, numReference FROM books WHERE isbn = %s"
+                data_isbn = (book_data["isbn"],)
+                cursor.execute(select_book, data_isbn)
+                result = cursor.fetchall()
+                if result:
+                    return result[0]
+                else:
+                    return None
+            except MySQLConnectionError as e:
+                error("Error de integridad:", e)
+            finally:
+                cursor.close()
+
     def connect_database(self):
         if self.conexion.is_connected():
-                success(f"[ 2 ] The DataBase is connected on host {config('MYSQL_HOST')} the PORT: {config('MYSQL_PORT')}")
+                success(f"[ 1 ] The DataBase is connected on host {config('MYSQL_HOST')} the PORT: {config('MYSQL_PORT')}")
         else:
-            MySQLConnectionError(f"No se pudo conectar al servidor MySQL al host : {config('MYSQL_HOST')} y puerto {config('MYSQL_PORT')} especificados. Por favor, revise el hosts o la dirección IP y el puerto.")
+            raise MySQLConnectionError(f"[ 1 ] No se pudo conectar al servidor MySQL al host : {config('MYSQL_HOST')} y puerto {config('MYSQL_PORT')} especificados. Por favor, revise el hosts o la dirección IP y el puerto.")
             
     def insert_nameCover(self, name_cover, idBook):
         if self.conexion.is_connected():
@@ -47,6 +65,8 @@ class DAO():
             return True
 
     def exist_databook(self, book_data):
+        print("<== BOOK DATA ==>", book_data)
+        print("<== BOOK DATA ==>", book_data["isbn"])
         if self.conexion.is_connected():
             try:
                 cursor = self.conexion.cursor()
@@ -87,7 +107,7 @@ class DAO():
                 query = ("INSERT INTO books "
                                     "(title, author, editorial, isbn, type, language) "
                                     "VALUES (%s, %s, %s, %s, %s, %s)")
-                value = (book_data["title"], book_data["author"], book_data["editorial"], book_data["isbn"], book_data["type"], book_data["language"])
+                value = (book_data["title"], book_data["author"], book_data["editorial"], book_data["isbn"], book_data["category"], book_data["language"])
                 cursor.execute(query, value)
                 self.conexion.commit()
                 book_id = cursor.lastrowid
@@ -104,7 +124,7 @@ class DAO():
             try:
                 cursor = self.conexion.cursor()
                 query = ("UPDATE books SET title=%s, author=%s, editorial=%s, isbn=%s, type=%s, language=%s WHERE bookID=%s")
-                value = (dataBook["title"], dataBook["author"], dataBook["editorial"], dataBook["isbn"], dataBook["type"], dataBook["language"], bookID)
+                value = (dataBook["title"], dataBook["author"], dataBook["editorial"], dataBook["isbn"], dataBook["category"], dataBook["language"], bookID)
                 cursor.execute(query, value)
                 self.conexion.commit()
             except MySQLConnectionError as e:

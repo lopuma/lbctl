@@ -10,3 +10,4 @@ redis
 Pillow
 minio==7.0.3
 loguru
+colored
