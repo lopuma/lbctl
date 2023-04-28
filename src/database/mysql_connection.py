@@ -105,9 +105,9 @@ class DAO():
             try:
                 cursor = self.conexion.cursor()
                 query = ("INSERT INTO books "
-                                    "(title, author, editorial, isbn, type, language) "
-                                    "VALUES (%s, %s, %s, %s, %s, %s)")
-                value = (book_data["title"], book_data["author"], book_data["editorial"], book_data["isbn"], book_data["category"], book_data["language"])
+                                    "(title, author, editorial, isbn, type, language, collection, purchase_date, observation, numReference) "
+                                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
+                value = (book_data["title"], book_data["author"], book_data["editorial"], book_data["isbn"], book_data["category"], book_data["language"], book_data["collection"], book_data["purchase_date"], book_data["observation"], book_data["numReference"])
                 cursor.execute(query, value)
                 self.conexion.commit()
                 book_id = cursor.lastrowid
@@ -123,8 +123,8 @@ class DAO():
         if self.conexion.is_connected():
             try:
                 cursor = self.conexion.cursor()
-                query = ("UPDATE books SET title=%s, author=%s, editorial=%s, isbn=%s, type=%s, language=%s WHERE bookID=%s")
-                value = (dataBook["title"], dataBook["author"], dataBook["editorial"], dataBook["isbn"], dataBook["category"], dataBook["language"], bookID)
+                query = ("UPDATE books SET title=%s, author=%s, editorial=%s, isbn=%s, type=%s, language=%s, collection=%s, purchase_date=%s, observation=%s, numReference=%s WHERE bookID=%s")
+                value = (dataBook["title"], dataBook["author"], dataBook["editorial"], dataBook["isbn"], dataBook["category"], dataBook["language"], dataBook["collection"], dataBook["purchase_date"], dataBook["observation"], dataBook["numReference"], bookID)
                 cursor.execute(query, value)
                 self.conexion.commit()
             except MySQLConnectionError as e:

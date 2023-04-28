@@ -32,7 +32,7 @@ color_key = "yellow"
 color_value = "blue"
 color_error = "red"
 color_warning = "magenta"
-__version__ = '1.0.0'
+__version__ = '1.0.1'
 _books_found = []
 host = config('WEBDRIVER_HOST')
 port = config('WEBDRIVER_PORT_CLI')
@@ -388,7 +388,7 @@ def loop(tareas):
         except StopIteration:
             pass
              
-def handle_duplicate_isbn(rbar, book_data_actual, data_book):
+def handle_duplicate_isbn(book_data_actual, data_book):
     bookID = book_data_actual[0]
     title = book_data_actual[1]
     author = book_data_actual[2]
@@ -439,7 +439,6 @@ def handle_duplicate_isbn(rbar, book_data_actual, data_book):
     while True:
         update_input = input(f"{fg(15)}{bg(166)}{style.BOLD} ¿ Deseas actualizar su información? ( S/s - N/n ) ? > {attr(0)} >  ")
         if update_input.lower() == "n":
-            rbar.close()
             return None        
         elif update_input.lower() == "s":
             _book_actual = book_dict
@@ -841,8 +840,10 @@ def extract_list_book(driver, articles):
 
 def data_operation(resultados, driver):
     data_book = resultados
+    tipo = None
+    add_or_update = None
     info("Realizando operaciones en la Base de datos....")
-    with tqdm(total=8) as rbar:
+    with tqdm(total=3) as rbar:
         #TODO ==============>
         try:
             dao = DAO()
@@ -882,150 +883,170 @@ def data_operation(resultados, driver):
         #TODO ====================>        
         # try:
         if(result):
-            rbar.close()
-            result_check_update = handle_duplicate_isbn(rbar, result, data_book)
+            add_or_update = handle_duplicate_isbn(result, data_book)
+            tipo = 'update'
         else:
-            rbar.close()
-            result_check = scheck_data_after_add(rbar, data_book)
+            add_or_update = scheck_data_after_add(data_book)
+            tipo = 'add'
         # except:
         #     rbar.close()
         #     error("[ 3 ] Update or ADD.")
         #     driver.quit()
         #     sys.exit(1)
         yield
-        # TODO UPDATE ====================> 
-        try:
-            if result_check_update:
-                print_data_json("LO QUE SEA", result_check_update)
-                rbar.close()
-                close_session_selenium(driver)
-            else:
-                rbar.close()
-                select_element(driver)
-        except:
+        #TODO ====================>        
+        # try:
+        if add_or_update is None:
             rbar.close()
-            pass
-        yield
-        # TODO ADD ====================> 
-        try:
-            if result_check:
-                #TODO ==============>
-                try:
-                    name_cover = extract_nameCover(result_check['cover'])
-                    if name_cover:
-                        success(f"[ 4 ] Cover {name_cover} descargado con éxito.")
-                        rbar.update(1)
-                except:
-                    rbar.close()
-                    error(f"[ 4 ] Error al descargar Cover.")
-                    close_session_selenium(driver)
-                time.sleep(0.5)
-                #TODO ==============>            
-                #try
-                book_id = dao.insert_databook(result_check)
-                if(book_id):
-                    success(f"[ 5 ] The book data has been added correctly, with ID : {book_id}")
-                    rbar.update(1)
-                    time.sleep(1)
-                    succes_insert_cover = dao.insert_nameCover(name_cover, book_id)
-                    if(succes_insert_cover):
-                        success(f"[ 6 ] The cover added correctly, with ID : {book_id}")
-                        rbar.update(1)
-                    else:
-                        error(f"[ 6 ] Error al añadir cover a la BD !")
-                        rbar.close()
-                else:
-                    error("[ 5 ] Error al añadir libro a la BD !")
-                    rbar.close()
-                # except:
-                #     rbar.close()
-                #     driver.quit()
-                #     sys.exit(1)
-                time.sleep(0.5)
-                #TODO ==============>
-                if (name_cover):
-                    response_cover = add_cover_minio(name_cover)
-                    if response_cover:
-                        success(f"[ 7 ] Cover data upload MINIO BUCKET {config('BUCKET_NAME')}, name cover is : {name_cover}.")
-                        rbar.update(1)
-                    else:
-                        error(f"[ 7 ] Error al subir cover a BUCKET {config('BUCKET_NAME')}.")
-                        rbar.close()
-                time.sleep(0.5)
-                #TODO ==============>
-                # try:
-                succes_redis_books = delete_book_redis()
-                succes_redis_bookInfo = delete_bookInfo_redis(book_id)
-                if succes_redis_books and succes_redis_bookInfo:
-                    success(f"[ 8 ] Eliminados datos en redis.")
-                    rbar.update(1)
-                else:
-                    error(f"[ 8 ] Error al eliminar datos en REDIS.")
-                    rbar.close()
-                # except:
-                #     rbar.close()
-                #     driver.quit()
-                #     sys.exit(1)
-                rbar.close()
-                close_session_selenium(driver)
-                # try:
-                #     if name_cover is not None:
-                #         response_cover = add_cover_minio(old_name_cover, name_cover)
-                #         if response_cover:
-                #             success(f"[ 9 ] Cover data upload MINIO BUCKET {config('BUCKET_NAME')}, name cover is : {name_cover}.")
-                #             rbar.update(1)
-                #         else:
-                #             error(f"[ 9 ] Error al subir cover a BUCKET {config('BUCKET_NAME')}.")
-                #             rbar.close()
-                #     rbar.close()
-                # except:
-                #     rbar.close()
-                #     driver.quit()
-                #     sys.exit(1)
-            else:
-                rbar.close()
-                select_element(driver)
-        except:
-            rbar.close()
-            pass
-        yield
+        else:
+            debug(add_or_update)
+            añadir_book_bd(driver, add_or_update, tipo)
+        # except:
+        #     rbar.close()
+        #     error("[ 3 ] Update or ADD.")
+        #     driver.quit()
+        #     sys.exit(1)
     yield
 
-def print_data_json(text, result_check_update):
-    if isinstance(result_check_update, list):
-        # Si result_check_update es una lista, creamos un diccionario con un valor por defecto de None
-        result_check_update = defaultdict(lambda: None, {f"New DATA": item for i, item in enumerate(result_check_update)})
-    else:
-        # Si result_check_update es un diccionario, lo convertimos a un defaultdict con un valor por defecto de None
-        result_check_update = defaultdict(lambda: None, result_check_update)
+def añadir_book_bd(driver, add_or_update, tipo='add'):
+    with tqdm(total=5) as uabar:
+        step = 0
+        if add_or_update:
+            dao = DAO()
+            name_cover = None
+            succes_insert_cover = None
+            try:
+                url_cover = add_or_update['cover']
+            except KeyError:
+                url_cover = None
+            #TODO ==============>
+            if url_cover:
+                try:
+                    name_cover = extract_nameCover(url_cover)
+                    if name_cover:
+                        success(f"[ 1 ] Cover {name_cover} descargado con éxito.")
+                        step += 1
+                        uabar.update(step)
+                except:
+                    uabar.close()
+                    error(f"[ 1 ] Error al descargar Cover.")
+                    close_session_selenium(driver)
+            #TODO ==============>            
+            time.sleep(0.5)
+            #try
+            if tipo == 'add':
+                book_id = dao.insert_databook(add_or_update)
+                if book_id:
+                    success(f"[ 2 ] The book data has been added correctly, with ID : {book_id}")
+                    step += 1
+                    uabar.update(step)
+                else:
+                    error("[ 2 ] Error al añadir libro a la BD !")
+                    uabar.close()
+            elif tipo == 'update':
+                book_id = add_or_update['bookID']
+                dao.update_databook(book_id, add_or_update)
+                if book_id:
+                    success(f"[ 2 ] The book data has been update correctly, with ID : {book_id}")
+                    step += 1
+                    uabar.update(step)
+                else:
+                    error("[ 2 ] Error al actualizar el libro en la BD !")
+                    uabar.close()
+            else:
+                pass
+            # except:
+            #     rbar.close()
+            #     driver.quit()
+            #     sys.exit(1)
+            #TODO ==============>
+            time.sleep(1)
+            if name_cover and book_id:
+                succes_insert_cover = dao.insert_nameCover(name_cover, book_id)
+                if(succes_insert_cover):
+                    success(f"[ 3 ] The cover added correctly, with ID : {book_id}")
+                    step += 1
+                    uabar.update(step)
+                else:
+                    error(f"[ 3 ] Error al añadir cover a la BD !")
+                    uabar.close()
+            #TODO ==============>
+            time.sleep(0.5)
+            if succes_insert_cover:
+                response_cover = add_cover_minio(name_cover)
+                if response_cover:
+                    success(f"[ 4 ] Cover data upload MINIO BUCKET {config('BUCKET_NAME')}, name cover is : {name_cover}.")
+                    step += 1
+                    uabar.update(step)
+                else:
+                    error(f"[ 4 ] Error al subir cover a BUCKET {config('BUCKET_NAME')}.")
+                    uabar.close()
+            #TODO ==============>
+            time.sleep(0.5)
+            # try:
+            succes_redis_books = delete_book_redis()
+            time.sleep(0.5)
+            succes_redis_bookInfo = delete_bookInfo_redis(book_id)
+            if succes_redis_books and succes_redis_bookInfo:
+                success(f"[ 5 ] Eliminados datos en redis.")
+                step += 1
+                uabar.update(step)
+            else:
+                error(f"[ 5 ] Error al eliminar datos en REDIS.")
+                uabar.close()
+            # except:
+            #     rbar.close()
+            #     driver.quit()
+            #     sys.exit(1)
+            uabar.close()
+            close_session_selenium(driver)
+            # try:
+            #     if name_cover is not None:
+            #         response_cover = add_cover_minio(old_name_cover, name_cover)
+            #         if response_cover:
+            #             success(f"[ 9 ] Cover data upload MINIO BUCKET {config('BUCKET_NAME')}, name cover is : {name_cover}.")
+            #             rbar.update(1)
+            #         else:
+            #             error(f"[ 9 ] Error al subir cover a BUCKET {config('BUCKET_NAME')}.")
+            #             rbar.close()
+            #     rbar.close()
+            # except:
+            #     rbar.close()
+            #     driver.quit()
+            #     sys.exit(1)
+        else:
+            uabar.close()
+            select_element(driver)
 
-    # Convertimos los valores de tipo datetime a str
-    for key, value in result_check_update.items():
+def print_data_json(text, result_check_pint):
+    if isinstance(result_check_pint, list):
+        result_check_pint = defaultdict(lambda: None, {f"New DATA": item for i, item in enumerate(result_check_pint)})
+    else:
+        result_check_pint = defaultdict(lambda: None, result_check_pint)
+
+    for key, value in result_check_pint.items():
         if isinstance(value, datetime.datetime):
-            result_check_update[key] = value.strftime('%Y-%m-%d')
+            result_check_pint[key] = value.strftime('%Y-%m-%d')
         elif value is None:
-            result_check_update[key] = 'None'
+            result_check_pint[key] = 'None'
     
     # Convertimos el defaultdict a un diccionario normal
-    result_check_update = dict(result_check_update)
+    result_check_pint = dict(result_check_pint)
     
     # Convertimos a JSON y mostramos en pantalla
-    json_str = json.dumps(result_check_update, indent=4, ensure_ascii=False)
+    json_str = json.dumps(result_check_pint, indent=4, ensure_ascii=False)
     encoded_str = json_str.encode('utf-8')
     print("\n")
     print(f"{fg(190)} {text} {attr(0)}")
     print(encoded_str.decode('utf-8'))
     print("\n")
     
-def scheck_data_after_add(rbar, data_book):
+def scheck_data_after_add(data_book):
     text = "Estos son los datos que se van añadir a la Bases de datos..."
-    print(type(data_book))
-    print(data_book)
     print_data_json(text, data_book)
     while True:
         add_input = input(f"{fg(15)}{bg(22)}{style.BOLD} ¿ Deseas añadir este libro a la Bases de datos ? ( S/s - N/n ){attr(0)} >  ")
         if add_input.lower() == 'n':
-            rbar.close()
             return None
         elif add_input.lower() == "s":
             print("\n")
