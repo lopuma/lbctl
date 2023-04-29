@@ -18,34 +18,35 @@ Este proyecto está diseñado para facilitar la gestión de la **biblioteca Libu
 <a name="requisitos"></a>
 ## Requisitos
 
-1. Para utilizar Liburutegia e Liburutegia control (**lbctl**), debes tener instalado Docker y Docker Compose en tu sistema operativo. Puedes descargar ambas herramientas de los siguientes enlaces:
+1. Para utilizar Liburutegia control (**lbctl**), debes tener instalado Docker y Docker Compose en tu sistema operativo. 
+    _Puedes descargar ambas herramientas en los siguientes enlaces:_
 
-  - [Docker](https://www.docker.com/get-started)
-  - [Docker Compose](https://docs.docker.com/compose/install/)
+    - [Docker](https://www.docker.com/get-started)
+    - [Docker Compose](https://docs.docker.com/compose/install/)
 
 2. Necesitas tener ejecutando la aplicacion web de Liburutegia 
 
-_Podras descargar el proyecto en:_
+    _Podras descargar el proyecto en:_
 
-  - [Liburutegia](https://github.com/lopuma/liburutegia)
+    - [Liburutegia](https://github.com/lopuma/liburutegia)
 
-#### Alemnos tener ejecutando estos servicios:
+    #### Alemnos tener ejecutando estos servicios:
 
-- [ ] Nginx
-- [ ] App Liburutegia
-- [x] Mysql
-- [x] Minio
-- [x] Redis
-- [ ] Redis commander
+    - [ ] Nginx
+    - [ ] App Liburutegia
+    - [x] Mysql
+    - [x] Minio
+    - [x] Redis
+    - [ ] Redis commander
 
-3. Tener ejecutando selenium firefox, se puede descargar desde su respositorio en github.
+3. Tener ejecutando selenium [ 'firefox', 'chrome', ''edge' ], se puede descargar desde su respositorio en github.
 
-  - [selenium-docker](https://github.com/SeleniumHQ/docker-selenium/)
+    - [selenium-docker](https://github.com/SeleniumHQ/docker-selenium/)
 
-#### Quick start
-```
-docker run -d -p 4444:4444 -p 7900:7900 --shm-size="2g" selenium/standalone-firefox:4.8.3-20230404
-```
+    #### Quick start FIREFOX
+    ```
+    docker run -d -p 4444:4444 -p 7900:7900 --shm-size="2g" selenium/standalone-firefox:4.8.3-20230404
+    ```
 
 <a name="uso"></a>
 ## Cómo utilizar `LBCTL`
