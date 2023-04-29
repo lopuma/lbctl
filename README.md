@@ -8,12 +8,11 @@ Este proyecto está diseñado para facilitar la gestión de la **biblioteca Libu
 
 ## Índice de contenidos
 * [Requisitos](#requisitos)
-* [Uso](#uso)
 * [Configuracion](#configuracion)
 * [Pasos comunes](#pasos)
   - [Linux](#linux)
   - [Windows](#windows)
-
+* [Uso](#uso)
 
 <a name="requisitos"></a>
 ## Requisitos
@@ -47,44 +46,34 @@ Este proyecto está diseñado para facilitar la gestión de la **biblioteca Libu
     ```
     docker run -d -p 4444:4444 -p 7900:7900 --shm-size="2g" selenium/standalone-firefox:4.8.3-20230404
     ```
-
-<a name="uso"></a>
-## Cómo utilizar `LBCTL`
-
-### Menú de opciones para lbctl
-
-Puedes utilizar una de las siguientes opciones:
-
-1. Buscar un libro por título: `lbctl find -t <título>`
-2. Buscar un libro por autor: `lbctl find -a <autor>`
-3. Buscar un libro por ISBN: `lbctl find -i <ISBN>`
-4. Buscar libro por titulo, author y ISBN `lbctl find -t <título> -a <autor> -i <ISBN>`
-5. help `lbctl -h / --help`
-
 <a name="configuracion"></a>
 ## Configuración
 
-Antes de utilizar el proyecto, debes configurar las variables de entorno necesarias. Para ello debes tener configurado un fichero ***.env***, se puede utilizar el mismo fichero ***.env*** utilizado en el proyecto web **Liburutegia**, añadiendo las siguientes variables.
+  Antes de utilizar el proyecto, debes configurar las variables de entorno necesarias. Para ello debes tener configurado un fichero ***.env***, se puede utilizar el mismo fichero ***.env*** utilizado en el proyecto web **Liburutegia**, añadiendo las siguientes variables, O bien declarar las variables en el fichero docker-compose _lo veremos mas adelante en pasos comunes_.
 
+  ```
+  ### WebDriver:
 
-### WebDriver
-```
-COVER_DIR: es el directorio en el que se encuentran las imágenes de portada para los libros de Liburutegia.
+    COVER_DIR: es el directorio en el que se encuentran las imágenes de portada para los libros de Liburutegia.
 
-MY_USER: Usuario con el que se construira el contenedor del proyecto lbctl
+    MY_USER: Usuario con el que se construira el contenedor del proyecto lbctl
 
-WEBDRIVER_HOST: es el nombre del host donde se ejecuta el servicio de WebDriver, el cual se utiliza para realizar pruebas automatizadas en la aplicación.
+    WEBDRIVER_HOST: es el nombre del host donde se ejecuta el servicio de WebDriver, el cual se utiliza para realizar pruebas automatizadas en la aplicación.
 
-WEBDRIVER_STANDALONE: el navegador web que se utilizará para la automatización de pruebas. Las opciones son "firefox", "chrome" o "edge".
+    WEBDRIVER_STANDALONE: el navegador web que se utilizará para la automatización de pruebas. Las opciones son "firefox", "chrome" o "edge".
 
-WEBDRIVER_PORT_CLI: el puerto en el que se ejecutará el servidor Selenium para la comunicación cliente-servidor.
+    WEBDRIVER_PORT_CLI: el puerto en el que se ejecutará el servidor Selenium para la comunicación cliente-servidor.
 
-WEBDRIVER_PORT_WEB: el puerto en el que se ejecutará el servidor Selenium para la interacción con el navegador web.
-```
-### MySql
-```
-MYSQL_USER: es el nombre de usuario de la base de datos MySQL que utiliza la aplicación.
-```
+    WEBDRIVER_PORT_WEB: el puerto en el que se ejecutará el servidor Selenium para la interacción con el navegador web.
+
+  ### MySql:
+
+    MYSQL_USER: es el nombre de usuario de la base de datos MySQL que utiliza la aplicación.
+  ```
+  O tambien puedes descargar una version completa de las variables que son necesarias para el proyecto ***lbctl*** :point_right: [Descargar archivo .env_example](https://raw.githubusercontent.com/lopuma/lbctl/master/dist/.env_example) :arrow_down:.
+  
+  
+  
 <a name="pasos"></a>
 ## Pasos comunes
 
@@ -249,3 +238,17 @@ Después de esto, se debería poder ejecutar el comando lbctl desde cualquier ub
 lbctl find -t Pokemon
 ```
 :ok_hand:
+
+
+<a name="uso"></a>
+## Cómo utilizar `LBCTL`
+
+### Menú de opciones para lbctl
+
+Puedes utilizar una de las siguientes opciones:
+
+1. Buscar un libro por título: `lbctl find -t <título>`
+2. Buscar un libro por autor: `lbctl find -a <autor>`
+3. Buscar un libro por ISBN: `lbctl find -i <ISBN>`
+4. Buscar libro por titulo, author y ISBN `lbctl find -t <título> -a <autor> -i <ISBN>`
+5. help `lbctl -h / --help`
