@@ -311,11 +311,9 @@ def add_cover_minio(name_cover, old_name_cover=None):
             )
             return True
         if isinstance(exc):
-            # Manejo específico para el error de tiempo de solicitud
             print("Error: La diferencia entre el tiempo de solicitud y el tiempo del servidor de Minio es demasiado grande")
             return None
         else:
-            # Manejo genérico para otros errores S3Error
             print("Error: Ocurrió un error al acceder al servidor de Minio")
             return None
 
@@ -442,6 +440,7 @@ def handle_duplicate_isbn(book_data_actual, data_book):
             return None        
         elif update_input.lower() == "s":
             _book_actual = book_dict
+            bookID = _book_actual['bookID']
             numReference = _book_actual['numReference']
             purchase_date = _book_actual['purchase_date']
             collection = _book_actual['collection']
@@ -465,6 +464,7 @@ def handle_duplicate_isbn(book_data_actual, data_book):
             else:
                 print("\n")
                 observation = input("Ingresa OBSERVACIÓN > ")
+            _book_actual['bookID'] = bookID
             _book_actual['numReference'] = numReference
             _book_actual['purchase_date'] = purchase_date
             _book_actual['collection'] = collection
@@ -479,7 +479,7 @@ def handle_duplicate_isbn(book_data_actual, data_book):
 def new_dict_data_update(nuevo_dic, actual_dict):
     data_update = {}
     #TODO ============================>>
-    data_update['bookID'] = actual_dict['bookID']
+
     data_update['numReference'] = actual_dict['numReference']
     data_update['purchase_date'] = actual_dict['purchase_date']
     data_update['collection'] = actual_dict['collection']
@@ -522,9 +522,11 @@ def new_dict_data_update(nuevo_dic, actual_dict):
     except KeyError:
         data_update = add_update_sino_exist('category', data_update, actual_dict)
     
+    data_update['bookID'] = actual_dict['bookID']
     return data_update
 
 def add_update_sino_exist(key, data_update_, actual_dict):
+    value = ''
     data_update = {
         'isbn': '',
         'numReference': '',
@@ -585,16 +587,20 @@ def add_update_sino_exist(key, data_update_, actual_dict):
         except KeyError:
             pass
     
-    if key not in data_update:
-        print("La llave no es válida.")
-        return
+    # if key not in data_update:
+    #     print("La llave no es válida.")
+    #     return
 
-    if actual_dict and actual_dict[key] != '':
-        print(f"El valor actual de {key.upper()} es: {actual_dict[key]}")
-        value = input(f"Ingrese el nuevo valor para {key.upper()} (Presione ENTER para mantener el valor actual) > ")
-    else:
+    if actual_dict[key] == '':
         print("\n")
         value = input(f"Ingresa {key.upper()} > ")
+    # if actual_dict and actual_dict[key] != '':
+    #     print("\n")
+    #     print(f"El valor actual de {key.upper()} es: {actual_dict[key]}")
+    #     value = input(f"Ingrese el nuevo valor para {key.upper()} (Presione ENTER para mantener el valor actual) > ")
+    # else:
+    #     print("\n")
+    #     value = input(f"Ingresa {key.upper()} > ")
     
     if value == '':
         if actual_dict and actual_dict[key] != '':
@@ -612,20 +618,17 @@ def add_book_bd(data, driver):
         url_cover = ''
         link_book = data['view']
         #TODO ====================>
-        # Abrir el link
         try:
             driver.get(link_book)
         except:
             pass
         #TODO ====================>
-        # obtener el valor del author
         try:
             author = capitalizar_palabras(data['author'])
             abar.update(1)
         except:
             pass
         #TODO ====================>
-        # obtener el valor del titulo
         try:
             data_title = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, './/*[@id="app"]/div[1]/main/div/div/div/div[3]//div[contains(@class, "product-info")]//h1')))
             title = capitalizar_palabras(data_title.text)
@@ -640,7 +643,6 @@ def add_book_bd(data, driver):
         except TimeoutException:
             title = ''
         #TODO ====================>
-        # Obtener el valor de categoria
         try:
             data_category = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, './/*[@id="breadcrumbs"]/div/div[2]/div[5]/a/span')))
             category = capitalizar_palabras(data_category.text)
@@ -648,13 +650,11 @@ def add_book_bd(data, driver):
         except TimeoutException:
             category = ''
         #TODO ====================>
-        # Obtener el cover
         try:
             data_cover = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, '//*[@id="app"]/div[1]/main/div/div/div/div[3]//div[contains(@class, "swiper-img-container")]//img')))
         except TimeoutException:
             data_cover = ''
         #TODO ====================>
-        # Si el cover existe, buscame el mas grande
         if data_cover:
             url_cover = data_cover.get_attribute("srcset").split(",")[-1].split(" ")[0]
             abar.update(1)
@@ -682,8 +682,8 @@ def add_book_bd(data, driver):
         #TODO ====================>        
         if elementos:
             for elemento in elementos:
-                valor = elemento.text.strip() # elimina espacios en blanco al inicio y final
-                if valor: # verifica si el valor no está vacío
+                valor = elemento.text.strip() 
+                if valor:
                     book.append(valor)      
             for i in range(len(book)):
                 if book[i] == "ISBN:":
@@ -880,32 +880,29 @@ def data_operation(resultados, driver):
             close_session_selenium(driver)
         yield
         time.sleep(0.5)
-        #TODO ====================>        
-        # try:
-        if(result):
-            add_or_update = handle_duplicate_isbn(result, data_book)
-            tipo = 'update'
-        else:
-            add_or_update = scheck_data_after_add(data_book)
-            tipo = 'add'
-        # except:
-        #     rbar.close()
-        #     error("[ 3 ] Update or ADD.")
-        #     driver.quit()
-        #     sys.exit(1)
-        yield
-        #TODO ====================>        
-        # try:
-        if add_or_update is None:
+        #TODO ====================>
+        try:
+            if(result):
+                add_or_update = handle_duplicate_isbn(result, data_book)
+                tipo = 'update'
+            else:
+                add_or_update = scheck_data_after_add(data_book)
+                tipo = 'add'
+        except:
             rbar.close()
-        else:
-            debug(add_or_update)
-            añadir_book_bd(driver, add_or_update, tipo)
-        # except:
-        #     rbar.close()
-        #     error("[ 3 ] Update or ADD.")
-        #     driver.quit()
-        #     sys.exit(1)
+            sys.exit(0)
+        yield
+        #TODO ====================>
+        try: 
+            if add_or_update is None:
+                rbar.close()
+                select_element(driver)
+            else:
+                añadir_book_bd(driver, add_or_update, tipo)
+        except:
+            rbar.close()
+            sys.exit(0)
+        yield
     yield
 
 def añadir_book_bd(driver, add_or_update, tipo='add'):
@@ -933,7 +930,6 @@ def añadir_book_bd(driver, add_or_update, tipo='add'):
                     close_session_selenium(driver)
             #TODO ==============>            
             time.sleep(0.5)
-            #try
             if tipo == 'add':
                 book_id = dao.insert_databook(add_or_update)
                 if book_id:
@@ -955,10 +951,6 @@ def añadir_book_bd(driver, add_or_update, tipo='add'):
                     uabar.close()
             else:
                 pass
-            # except:
-            #     rbar.close()
-            #     driver.quit()
-            #     sys.exit(1)
             #TODO ==============>
             time.sleep(1)
             if name_cover and book_id:
@@ -983,37 +975,23 @@ def añadir_book_bd(driver, add_or_update, tipo='add'):
                     uabar.close()
             #TODO ==============>
             time.sleep(0.5)
-            # try:
-            succes_redis_books = delete_book_redis()
-            time.sleep(0.5)
-            succes_redis_bookInfo = delete_bookInfo_redis(book_id)
-            if succes_redis_books and succes_redis_bookInfo:
-                success(f"[ 5 ] Eliminados datos en redis.")
-                step += 1
-                uabar.update(step)
-            else:
-                error(f"[ 5 ] Error al eliminar datos en REDIS.")
+            try:
+                succes_redis_books = delete_book_redis()
+                time.sleep(0.5)
+                succes_redis_bookInfo = delete_bookInfo_redis(book_id)
+                if succes_redis_books and succes_redis_bookInfo:
+                    success(f"[ 5 ] Eliminados datos en redis.")
+                    step += 1
+                    uabar.update(step)
+                else:
+                    error(f"[ 5 ] Error al eliminar datos en REDIS.")
+                    uabar.close()
+            except:
                 uabar.close()
-            # except:
-            #     rbar.close()
-            #     driver.quit()
-            #     sys.exit(1)
+                driver.quit()
+                sys.exit(1)
             uabar.close()
             close_session_selenium(driver)
-            # try:
-            #     if name_cover is not None:
-            #         response_cover = add_cover_minio(old_name_cover, name_cover)
-            #         if response_cover:
-            #             success(f"[ 9 ] Cover data upload MINIO BUCKET {config('BUCKET_NAME')}, name cover is : {name_cover}.")
-            #             rbar.update(1)
-            #         else:
-            #             error(f"[ 9 ] Error al subir cover a BUCKET {config('BUCKET_NAME')}.")
-            #             rbar.close()
-            #     rbar.close()
-            # except:
-            #     rbar.close()
-            #     driver.quit()
-            #     sys.exit(1)
         else:
             uabar.close()
             select_element(driver)
@@ -1030,10 +1008,8 @@ def print_data_json(text, result_check_pint):
         elif value is None:
             result_check_pint[key] = 'None'
     
-    # Convertimos el defaultdict a un diccionario normal
     result_check_pint = dict(result_check_pint)
     
-    # Convertimos a JSON y mostramos en pantalla
     json_str = json.dumps(result_check_pint, indent=4, ensure_ascii=False)
     encoded_str = json_str.encode('utf-8')
     print("\n")
