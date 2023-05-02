@@ -1,7 +1,7 @@
 import mysql.connector
 from decouple import config
 from termcolor import colored
-from utils.utils import success, info, error, warning
+from utils.utils import success, info, error, warning, debug
 from mysql.connector.errors import ProgrammingError, DatabaseError
 
 class MySQLConnectionError(Exception):
@@ -32,7 +32,11 @@ class DAO():
                 cursor.execute(select_book, data_isbn)
                 result = cursor.fetchall()
                 if result:
-                    return result[0]
+                    bookID = result[0][0]
+                    nameCover = self.extract_nameCover(bookID)
+                    debug("nameCover => ",nameCover)
+                    books = [result[0], nameCover]
+                    return books
                 else:
                     return None
             except MySQLConnectionError as e:
@@ -40,6 +44,22 @@ class DAO():
             finally:
                 cursor.close()
 
+    def extract_nameCover(self, idBook):
+        try:
+            cursor = self.conexion.cursor()
+            sqlSelect = "SELECT nameCover FROM coverBooks WHERE bookID = %s"
+            bookID = (idBook, )
+            cursor.execute(sqlSelect, bookID)
+            result = cursor.fetchall()
+            if result:
+                return result[0]
+            else:
+                return None
+        except MySQLConnectionError as e:
+            error("Error de integridad:", e)
+        finally:
+            cursor.close()
+    
     def connect_database(self):
         if self.conexion.is_connected():
                 success(f"[ 1 ] The DataBase is connected on host {config('MYSQL_HOST')} the PORT: {config('MYSQL_PORT')}")
@@ -65,8 +85,6 @@ class DAO():
             return True
 
     def exist_databook(self, book_data):
-        print("<== BOOK DATA ==>", book_data)
-        print("<== BOOK DATA ==>", book_data["isbn"])
         if self.conexion.is_connected():
             try:
                 cursor = self.conexion.cursor()

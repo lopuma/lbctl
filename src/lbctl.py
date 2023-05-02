@@ -116,7 +116,7 @@ def main():
     restart_parser = subparsers.add_parser(
         'restart',
         usage='lbctl restart CONTAINER',
-        help='restartear el contenedor'
+        help='Reinicar el contenedor'
     )
         
     restart_parser.add_argument(
@@ -144,7 +144,7 @@ def main():
     if not (hasattr(args, 'v') and args.v or hasattr(args, 'h') and args.h):        
         if hasattr(args, 'query'):
             if args.query:
-                
+                clear_screem()
                 if (standalone == 'firefox'):
                     options = webdriver.FirefoxOptions()
                     options.add_argument('--start-maximized')
@@ -175,7 +175,7 @@ def main():
                 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
                 #TODO Establece un tiempo de espera para la conexión
-                client_socket.settimeout(3)
+                client_socket.settimeout(2)
 
                 #TODO Intenta conectarse al host
                 try:
@@ -387,19 +387,20 @@ def loop(tareas):
             pass
              
 def handle_duplicate_isbn(book_data_actual, data_book):
-    bookID = book_data_actual[0]
-    title = book_data_actual[1]
-    author = book_data_actual[2]
-    editorial = book_data_actual[3]
-    isbn = book_data_actual[4]
-    type = book_data_actual[5]
-    language = book_data_actual[6]
-    collection = book_data_actual[7]
-    purchase_date = book_data_actual[8]
-    observation = book_data_actual[9]
-    reserved = book_data_actual[10]
-    numReference = book_data_actual[12]
-
+    bookID = book_data_actual[0][0]
+    title = book_data_actual[0][1]
+    author = book_data_actual[0][2]
+    editorial = book_data_actual[0][3]
+    isbn = book_data_actual[0][4]
+    type = book_data_actual[0][5]
+    language = book_data_actual[0][6]
+    collection = book_data_actual[0][7]
+    purchase_date = book_data_actual[0][8]
+    observation = book_data_actual[0][9]
+    reserved = book_data_actual[0][10]
+    numReference = book_data_actual[0][12]
+    cover = book_data_actual[1]
+    debug("COVERS SI => ", cover)
     book_dict = {
         'bookID': bookID,
         'title': title,
@@ -412,8 +413,14 @@ def handle_duplicate_isbn(book_data_actual, data_book):
         'purchase_date': purchase_date,
         'observation': observation,
         'reserved': reserved,
-        'numReference': numReference
+        'numReference': numReference,
     }
+    if cover is not None:
+        book_dict['cover'] = cover[0]
+    else:
+        book_dict['cover'] = None
+
+    debug("2 => ", cover)
     book_dict_copy = {}
     for key, value in book_dict.items():
         if key == 'numReference':
@@ -424,12 +431,16 @@ def handle_duplicate_isbn(book_data_actual, data_book):
             book_dict_copy['Categoria'] = value
         elif key == 'reserved':
             book_dict_copy['Libro reservado'] = 'Si' if value == 1 else 'No' if value == 0 else value
+        elif key == 'cover':
+            book_dict_copy['Portada'] = 'Si' if value != None else 'No' if value == None else value
         else:
             book_dict_copy[key] = value
             new_data = {}
+            
     for key, value in data_book[0].items():
         if value != "":
             new_data[key] = value
+            
     text = "Este libro ya existe en la base de datos..."
     print_data_json(text, book_dict_copy)
     text = "Se va actualizar A..."
@@ -448,8 +459,8 @@ def handle_duplicate_isbn(book_data_actual, data_book):
             if(numReference):
                 pass
             else:
-                print("\n")
-                numReference = input("Ingresa NUMERO DE REFERENCIA > ")
+               print("\n")
+               numReference = input("Ingresa NUMERO DE REFERENCIA > ")
             if(purchase_date):
                 pass
             else:
@@ -469,8 +480,10 @@ def handle_duplicate_isbn(book_data_actual, data_book):
             _book_actual['purchase_date'] = purchase_date
             _book_actual['collection'] = collection
             _book_actual['observation'] = observation
+            debug("4 => ", _book_actual['cover'])
             #TODO =======================>
             data_update = new_dict_data_update(new_data, _book_actual)
+            debug("6 => * ", data_update)
             return data_update
         else:
             print("\n\t" , colored(f"La opción", color_error), colored({update_input}, "blue"),colored(" no es válida. Por favor, ingrese una opcion validad ", color_error) + colored("S/s", color_out) + colored(" o ",color_error) + colored("N/n ", color_warning) + colored("para cancelar.", color_error))
@@ -523,6 +536,11 @@ def new_dict_data_update(nuevo_dic, actual_dict):
         data_update = add_update_sino_exist('category', data_update, actual_dict)
     
     data_update['bookID'] = actual_dict['bookID']
+    if(actual_dict['cover']):
+        pass
+    else:
+        data_update['cover'] = nuevo_dic['cover']
+        debug("5 => ", data_update['cover'])
     return data_update
 
 def add_update_sino_exist(key, data_update_, actual_dict):
@@ -868,29 +886,30 @@ def data_operation(resultados, driver):
         yield
         time.sleep(0.5)
         #TODO ==============>        
-        try:
-            dao = DAO()
-            result = dao.check_data(book_data)
-            success("[ 3 ] Comprobando datos.")
-            rbar.update(1)
-            print("\n")
-        except:
-            rbar.close()
-            error("[ 3 ] Error al comprobar datos.")
-            close_session_selenium(driver)
+        #try:
+        dao = DAO()
+        result = dao.check_data(book_data)
+        debug("Result => ", result)
+        success("[ 3 ] Comprobando datos.")
+        rbar.update(1)
+        print("\n")
+        # except:
+        #     rbar.close()
+        #     error("[ 3 ] Error al comprobar datos.")
+        #     close_session_selenium(driver)
         yield
         time.sleep(0.5)
         #TODO ====================>
-        try:
-            if(result):
-                add_or_update = handle_duplicate_isbn(result, data_book)
-                tipo = 'update'
-            else:
-                add_or_update = scheck_data_after_add(data_book)
-                tipo = 'add'
-        except:
-            rbar.close()
-            sys.exit(0)
+        # try:
+        if(result):
+            add_or_update = handle_duplicate_isbn(result, data_book)
+            tipo = 'update'
+        else:
+            add_or_update = scheck_data_after_add(data_book)
+            tipo = 'add'
+        # except:
+        #     rbar.close()
+        #     sys.exit(0)
         yield
         #TODO ====================>
         try: 
@@ -906,6 +925,7 @@ def data_operation(resultados, driver):
     yield
 
 def añadir_book_bd(driver, add_or_update, tipo='add'):
+    debug("7 =>", add_or_update)
     with tqdm(total=5) as uabar:
         step = 0
         if add_or_update:
@@ -1092,5 +1112,4 @@ def initContainer(command, container):
             sys.exit(1)
 
 if __name__=='__main__':
-    clear_screem()
     main()
