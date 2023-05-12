@@ -12,7 +12,7 @@ class DAO():
         try:
             self.conexion = mysql.connector.connect(
                 host=config('MYSQL_HOST'),
-                user=config('MYSQL_USER'),
+                user=config('MYSQL_USER', default='root'),
                 password=config('MYSQL_PASSWORD'),
                 port=config('MYSQL_PORT'),
                 database=config('MYSQL_DATABASE')
@@ -34,7 +34,6 @@ class DAO():
                 if result:
                     bookID = result[0][0]
                     nameCover = self.extract_nameCover(bookID)
-                    debug("nameCover => ",nameCover)
                     books = [result[0], nameCover]
                     return books
                 else:
@@ -175,6 +174,3 @@ class DAO():
             error("Error de integridad:", e)
         finally:
                 cursor.close()
-        
-        
-        

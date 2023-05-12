@@ -400,7 +400,6 @@ def handle_duplicate_isbn(book_data_actual, data_book):
     reserved = book_data_actual[0][10]
     numReference = book_data_actual[0][12]
     cover = book_data_actual[1]
-    debug("COVERS SI => ", cover)
     book_dict = {
         'bookID': bookID,
         'title': title,
@@ -419,8 +418,6 @@ def handle_duplicate_isbn(book_data_actual, data_book):
         book_dict['cover'] = cover[0]
     else:
         book_dict['cover'] = None
-
-    debug("2 => ", cover)
     book_dict_copy = {}
     for key, value in book_dict.items():
         if key == 'numReference':
@@ -480,10 +477,8 @@ def handle_duplicate_isbn(book_data_actual, data_book):
             _book_actual['purchase_date'] = purchase_date
             _book_actual['collection'] = collection
             _book_actual['observation'] = observation
-            debug("4 => ", _book_actual['cover'])
             #TODO =======================>
             data_update = new_dict_data_update(new_data, _book_actual)
-            debug("6 => * ", data_update)
             return data_update
         else:
             print("\n\t" , colored(f"La opción", color_error), colored({update_input}, "blue"),colored(" no es válida. Por favor, ingrese una opcion validad ", color_error) + colored("S/s", color_out) + colored(" o ",color_error) + colored("N/n ", color_warning) + colored("para cancelar.", color_error))
@@ -540,7 +535,6 @@ def new_dict_data_update(nuevo_dic, actual_dict):
         pass
     else:
         data_update['cover'] = nuevo_dic['cover']
-        debug("5 => ", data_update['cover'])
     return data_update
 
 def add_update_sino_exist(key, data_update_, actual_dict):
@@ -662,11 +656,21 @@ def add_book_bd(data, driver):
             title = ''
         #TODO ====================>
         try:
-            data_category = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, './/*[@id="breadcrumbs"]/div/div[2]/div[5]/a/span')))
+            data_category = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, './/*[@id="breadcrumbs"]/div/div[2]/div[9]/a/span')))
             category = capitalizar_palabras(data_category.text)
             abar.update(1)
         except TimeoutException:
-            category = ''
+            try:
+                data_category = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, './/*[@id="breadcrumbs"]/div/div[2]/div[7]/a/span')))
+                category = capitalizar_palabras(data_category.text)
+                abar.update(1)
+            except TimeoutException:
+                try:
+                    data_category = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, './/*[@id="breadcrumbs"]/div/div[2]/div[5]/a/span')))
+                    category = capitalizar_palabras(data_category.text)
+                    abar.update(1)
+                except TimeoutException:
+                    category = ''
         #TODO ====================>
         try:
             data_cover = WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, '//*[@id="app"]/div[1]/main/div/div/div/div[3]//div[contains(@class, "swiper-img-container")]//img')))
@@ -886,30 +890,29 @@ def data_operation(resultados, driver):
         yield
         time.sleep(0.5)
         #TODO ==============>        
-        #try:
-        dao = DAO()
-        result = dao.check_data(book_data)
-        debug("Result => ", result)
-        success("[ 3 ] Comprobando datos.")
-        rbar.update(1)
-        print("\n")
-        # except:
-        #     rbar.close()
-        #     error("[ 3 ] Error al comprobar datos.")
-        #     close_session_selenium(driver)
+        try:
+            dao = DAO()
+            result = dao.check_data(book_data)
+            success("[ 3 ] Comprobando datos.")
+            rbar.update(1)
+            print("\n")
+        except:
+            rbar.close()
+            error("[ 3 ] Error al comprobar datos.")
+            close_session_selenium(driver)
         yield
         time.sleep(0.5)
         #TODO ====================>
-        # try:
-        if(result):
-            add_or_update = handle_duplicate_isbn(result, data_book)
-            tipo = 'update'
-        else:
-            add_or_update = scheck_data_after_add(data_book)
-            tipo = 'add'
-        # except:
-        #     rbar.close()
-        #     sys.exit(0)
+        try:
+            if(result):
+                add_or_update = handle_duplicate_isbn(result, data_book)
+                tipo = 'update'
+            else:
+                add_or_update = scheck_data_after_add(data_book)
+                tipo = 'add'
+        except:
+            rbar.close()
+            sys.exit(0)
         yield
         #TODO ====================>
         try: 
@@ -925,7 +928,6 @@ def data_operation(resultados, driver):
     yield
 
 def añadir_book_bd(driver, add_or_update, tipo='add'):
-    debug("7 =>", add_or_update)
     with tqdm(total=5) as uabar:
         step = 0
         if add_or_update:
