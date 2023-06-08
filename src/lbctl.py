@@ -268,16 +268,18 @@ def process_image(data_cover):
     url = data_cover
     name_cover = generate_cover_rand(15)
     pictures_dir = f'/app/{config("BUCKET_NAME")}/'
+    os.makedirs(pictures_dir, exist_ok=True)
     try:
-        urllib.request.urlretrieve(url, pictures_dir + name_cover + '.png')
-    except FileNotFoundError as e:
-        error("Error: ", f"el directorio {pictures_dir} de destino no existe.")
-        sys.exit(1)
-    with Image.open(pictures_dir + name_cover + '.png') as img:
-        img = img.resize((200, 322), resample=Image.LANCZOS, box=None, reducing_gap=None)
-        img = img.convert('RGB')
-        img.save(pictures_dir + name_cover + '.png', format='PNG', optimize=True)
-    return name_cover
+        image_path = os.path.join(pictures_dir, name_cover + '.png')
+        urllib.request.urlretrieve(url, image_path)
+        with Image.open(image_path) as img:
+            img = img.resize((200, 322), resample=Image.LANCZOS)
+            img = img.convert('RGB')
+            img.save(image_path, format='PNG', optimize=True)
+        return name_cover
+    except Exception as e:
+        error("Error:", str(e))
+        return None
 
 def add_cover_minio(name_cover, old_name_cover=None):
     old_filename = old_name_cover
@@ -598,21 +600,10 @@ def add_update_sino_exist(key, data_update_, actual_dict):
             data_update['category'] = data_update_['category']
         except KeyError:
             pass
-    
-    # if key not in data_update:
-    #     print("La llave no es válida.")
-    #     return
 
     if actual_dict[key] == '':
         print("\n")
         value = input(f"Ingresa {key.upper()} > ")
-    # if actual_dict and actual_dict[key] != '':
-    #     print("\n")
-    #     print(f"El valor actual de {key.upper()} es: {actual_dict[key]}")
-    #     value = input(f"Ingrese el nuevo valor para {key.upper()} (Presione ENTER para mantener el valor actual) > ")
-    # else:
-    #     print("\n")
-    #     value = input(f"Ingresa {key.upper()} > ")
     
     if value == '':
         if actual_dict and actual_dict[key] != '':
@@ -683,43 +674,43 @@ def add_book_bd(data, driver):
         else:
             url_cover = None
         #TODO ====================>        
-        book = []
         resultados = []
         isbn = None
         idioma = None
         editorial = None
         #TODO ====================>        
         try:
-            elementos = WebDriverWait(driver, 5).until(EC.presence_of_all_elements_located((By.XPATH, '//*[@id="app"]/div[1]/main/div/div/div/div[7]//div[contains(@class,"border-left")]//div[@class="hidden-sm-and-down"]//span')))
+            elementos = WebDriverWait(driver, 5).until(EC.presence_of_all_elements_located((By.XPATH, '//*[@id="app"]/div[1]/main/div/div/div/div[8]//div[contains(@class,"dataSheet")]')))
         except TimeoutException:
-            #TODO ====================>        
             try:
-                elementos = WebDriverWait(driver, 5).until(EC.presence_of_all_elements_located((By.XPATH, '//*[@id="app"]/div[1]/main/div/div/div/div[6]//div[contains(@class,"border-left")]//div[@class="hidden-sm-and-down"]//span')))
+                elementos = WebDriverWait(driver, 5).until(EC.presence_of_all_elements_located((By.XPATH, '//*[@id="app"]/div[1]/main/div/div/div/div[7]//div[contains(@class,"dataSheet")]')))
             except TimeoutException:
-                #TODO ====================>        
                 try:
-                    elementos = WebDriverWait(driver, 5).until(EC.presence_of_all_elements_located((By.XPATH, '//*[@id="app"]/div[1]/main/div/div/div/div[4]//div[contains(@class,"border-left")]//div[@class="hidden-sm-and-down"]//span')))
+                    elementos = WebDriverWait(driver, 5).until(EC.presence_of_all_elements_located((By.XPATH, '//*[@id="app"]/div[1]/main/div/div/div/div[6]//div[contains(@class,"dataSheet")]')))
                 except TimeoutException:
-                    elementos = ''
-        #TODO ====================>        
+                    try:
+                        elementos = WebDriverWait(driver, 5).until(EC.presence_of_all_elements_located((By.XPATH, '//*[@id="app"]/div[1]/main/div/div/div/div[4]//div[contains(@class,"dataSheet")]')))
+                    except TimeoutException:
+                        elementos = ''
+        #TODO ====================>
+        datos = {} 
         if elementos:
             for elemento in elementos:
-                valor = elemento.text.strip() 
-                if valor:
-                    book.append(valor)      
-            for i in range(len(book)):
-                if book[i] == "ISBN:":
-                    isbn = book[i+1]
-                    abar.update(1)
-                if book[i] == "Idioma:":
-                    idioma = book[i+1]
-                    abar.update(1)
-                if book[i] == "Editorial:":
-                    editorial = book[i+1]
-                    abar.update(1)
-                    
+                textos = elemento.find_elements(By.XPATH, ".//span")
+                for i in range(0, len(textos), 2):
+                    clave = textos[i].text.strip(":")
+                    valor = textos[i+1].text
+                    datos[clave] = valor
+                    if textos[i].text == "ISBN:":
+                        isbn = textos[i+1].text
+                        abar.update(1)
+                    if textos[i].text == "Idioma:":
+                        idioma = textos[i+1].text
+                        abar.update(1)
+                    if textos[i].text == "Editorial:":
+                        editorial = textos[i+1].text
+                        abar.update(1)
             resultados.append({'isbn': isbn, 'language': capitalizar_palabras(idioma), 'editorial': capitalizar_palabras(editorial), 'title': title, 'author': author, 'category': category, 'cover': url_cover})
-            
             if not resultados:
                 warning('No se encontraron resultados.')
                 abar.close()

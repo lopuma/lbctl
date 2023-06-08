@@ -31,7 +31,6 @@ def select_option(text: str, extra_info: Optional[str] = None, color: Optional[s
         message += f" - {extra_info}"
     logger.opt(colors=True).warning(os.linesep + message)
 
-
 def error(text: str, extra_info: Optional[str] = None):
     print("\n")
     message = colored(text, "red")
