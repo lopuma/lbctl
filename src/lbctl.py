@@ -42,9 +42,8 @@ port = int(port)
 myOs = sys.platform
 home = Path.home()
 if os.path.exists('/app'):
-    directory = '/app'
+    pictures_dir = str(Path("/app", "Pictures", _bucket_name))
 else:
-    directory = home
     pictures_dir = str(Path(home, "Pictures", _bucket_name))
 
 
@@ -295,7 +294,6 @@ def generate_cover_rand(length, type='default'):
 def process_image(data_cover):
     url = data_cover
     name_cover = generate_cover_rand(15)
-    # pictures_dir = os.path.join(directory, _bucket_name, "")
     os.makedirs(pictures_dir, exist_ok=True)
     try:
         image_path = os.path.join(pictures_dir, name_cover + '.png')
