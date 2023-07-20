@@ -10,4 +10,4 @@ loguru==0.7.0
 minio==7.0.3
 mysql-connector-python==8.1.0
 python-decouple==3.8
-selenium==3.141.0
+selenium==4.10.0
