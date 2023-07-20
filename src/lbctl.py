@@ -46,9 +46,6 @@ if os.path.exists('/app'):
 else:
     pictures_dir = str(Path(home, "Pictures", _bucket_name))
 
-debug(host)
-debug(port)
-
 
 def convertir_a_minusculas(cadena):
     cadena_en_mayusculas = cadena.upper()
@@ -213,7 +210,6 @@ def main():
                             host, port),
                         options=options,
                     )
-                    warning(driver)
                     print("-------")
                     findBook(args.query, driver, parser)
                 except WebDriverException:
