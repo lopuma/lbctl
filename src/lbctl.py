@@ -157,7 +157,7 @@ def main():
     if not (hasattr(args, 'v') and args.v or hasattr(args, 'h') and args.h):
         if hasattr(args, 'query'):
             if args.query:
-                # clear_screem()
+                clear_screem()
                 if (standalone == 'firefox'):
                     options = webdriver.FirefoxOptions()
                     options.add_argument('--start-maximized')
@@ -201,8 +201,8 @@ def main():
                     print(
                         f"No se pudo conectar a SELENIUM http://{host}:{config('WEBDRIVER_PORT_WEB')}. Error: {err}")
                     return
-                # finally:
-                #     client_socket.close()
+                finally:
+                    client_socket.close()
                 # TODO Si existe conexion, empezamos con el scraping
                 try:
                     driver = webdriver.Remote(
@@ -210,7 +210,6 @@ def main():
                             host, port),
                         options=options,
                     )
-                    print("-------")
                     findBook(args.query, driver, parser)
                 except WebDriverException:
                     warning("No se ha encontrado ninguna sesión activa")
@@ -480,7 +479,7 @@ def handle_duplicate_isbn(book_data_actual, data_book):
     print_data_json(text, new_data)
     while True:
         update_input = input(
-            f"{fg(15)}{bg(166)}{style.BOLD} ¿ Deseas actualizar su información? ( S/s - N/n ) ? > {attr(0)} >  ")
+            f"{fg(15)}{bg(166)} ¿ Deseas actualizar su información? ( S/s - N/n ) ? > {attr(0)} >  ")
         if update_input.lower() == "n":
             return None
         elif update_input.lower() == "s":
@@ -782,7 +781,7 @@ def select_element(driver):
     info("Cargando datos....")
     for i in trange(5, unit="s", unit_scale=0.1, unit_divisor=1):
         time.sleep(0.2)
-    # clear_screem()
+    clear_screem()
     imprimir_menu()
     while True:
         user_input = input(
