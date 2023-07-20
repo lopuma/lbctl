@@ -46,6 +46,9 @@ if os.path.exists('/app'):
 else:
     pictures_dir = str(Path(home, "Pictures", _bucket_name))
 
+debug(host)
+debug(port)
+
 
 def convertir_a_minusculas(cadena):
     cadena_en_mayusculas = cadena.upper()
@@ -157,7 +160,7 @@ def main():
     if not (hasattr(args, 'v') and args.v or hasattr(args, 'h') and args.h):
         if hasattr(args, 'query'):
             if args.query:
-                clear_screem()
+                # clear_screem()
                 if (standalone == 'firefox'):
                     options = webdriver.FirefoxOptions()
                     options.add_argument('--start-maximized')
@@ -781,7 +784,7 @@ def select_element(driver):
     info("Cargando datos....")
     for i in trange(5, unit="s", unit_scale=0.1, unit_divisor=1):
         time.sleep(0.2)
-    clear_screem()
+    # clear_screem()
     imprimir_menu()
     while True:
         user_input = input(
