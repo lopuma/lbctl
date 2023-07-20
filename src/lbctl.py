@@ -193,7 +193,7 @@ def main():
                     socket.AF_INET, socket.SOCK_STREAM)
 
                 # TODO Establece un tiempo de espera para la conexión
-                client_socket.settimeout(2)
+                client_socket.settimeout(5)
 
                 # TODO Intenta conectarse al host
                 try:
@@ -204,15 +204,17 @@ def main():
                     print(
                         f"No se pudo conectar a SELENIUM http://{host}:{config('WEBDRIVER_PORT_WEB')}. Error: {err}")
                     return
-                finally:
-                    client_socket.close()
+                # finally:
+                #     client_socket.close()
                 # TODO Si existe conexion, empezamos con el scraping
                 try:
                     driver = webdriver.Remote(
-                        command_executor='http://{}:{}/wd/hub'.format(
+                        command_executor='http://{}:{}'.format(
                             host, port),
                         options=options,
                     )
+                    warning(driver)
+                    print("-------")
                     findBook(args.query, driver, parser)
                 except WebDriverException:
                     warning("No se ha encontrado ninguna sesión activa")
