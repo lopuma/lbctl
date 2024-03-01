@@ -31,7 +31,7 @@ RUN mkdir -p /app/${BUCKET_NAME}
 COPY . .
 
 #Stage 2: Create the final image
-FROM python:3.10-slim
+FROM python:3.13.0a4-slim
 
 # Establecer el directorio de trabajo
 WORKDIR /app
